@@ -483,10 +483,19 @@ public partial class MainWindow : Window
     // Maps a double-click near a Y axis to that scale's editor (title area = rename, numbers area = min/max).
     private bool TryEditAxisAtPoint(Point p)
     {
-        if (_renderedScales.Count == 0) return false;
+        var (scale, titleArea) = HitTestAxis(p);
+        if (scale is null) return false;
+        new ScaleEditorWindow(scale, focusName: titleArea) { Owner = this }.ShowDialog();
+        return true;
+    }
+
+    // Returns the scale under a point in the left/right axis band, and whether the point is over the title (vs numbers).
+    private (AxisViewModel? Scale, bool TitleArea) HitTestAxis(Point p)
+    {
+        if (_renderedScales.Count == 0) return (null, false);
 
         var rect = WpfPlot.Plot.RenderManager.LastRender.DataRect;
-        if (rect.Width <= 0 || rect.Height <= 0) return false;
+        if (rect.Width <= 0 || rect.Height <= 0) return (null, false);
 
         var dpi = VisualTreeHelper.GetDpi(WpfPlot);
         var left = rect.Left / dpi.DpiScaleX;
@@ -494,14 +503,14 @@ public partial class MainWindow : Window
         var top = rect.Top / dpi.DpiScaleY;
         var bottom = rect.Bottom / dpi.DpiScaleY;
 
-        if (p.Y < top - 4 || p.Y > bottom + 4) return false;
+        if (p.Y < top - 4 || p.Y > bottom + 4) return (null, false);
 
         AxisSide side;
         bool titleArea;
         if (p.X < left)
         {
             side = AxisSide.Left;
-            titleArea = p.X < left * 0.5;                       // outer half holds the rotated title
+            titleArea = p.X < left * 0.5;
         }
         else if (p.X > right)
         {
@@ -510,14 +519,55 @@ public partial class MainWindow : Window
         }
         else
         {
-            return false;                                        // click was inside the data area
+            return (null, false);
         }
 
-        var scale = _renderedScales.FirstOrDefault(s => s.Side == side);
-        if (scale is null) return false;
+        return (_renderedScales.FirstOrDefault(s => s.Side == side), titleArea);
+    }
 
-        new ScaleEditorWindow(scale, focusName: titleArea) { Owner = this }.ShowDialog();
-        return true;
+    // Right-click on a Y axis opens a menu to edit/move/add/delete that scale.
+    private void Plot_MouseRightButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        var (scale, _) = HitTestAxis(e.GetPosition(WpfPlot));
+        var menu = new ContextMenu();
+
+        MenuItem Item(string header, Action action, bool enabled = true)
+        {
+            var mi = new MenuItem { Header = header, IsEnabled = enabled };
+            mi.Click += (_, _) => action();
+            return mi;
+        }
+
+        if (scale is not null)
+        {
+            menu.Items.Add(Item("Scale settings\u2026", () => new ScaleEditorWindow(scale, true) { Owner = this }.ShowDialog()));
+            menu.Items.Add(Item("Set min / max\u2026", () => new ScaleEditorWindow(scale, false) { Owner = this }.ShowDialog()));
+
+            var auto = new MenuItem { Header = "Auto-scale", IsCheckable = true, IsChecked = scale.Auto };
+            auto.Click += (s, _) => scale.Auto = ((MenuItem)s).IsChecked;
+            menu.Items.Add(auto);
+
+            menu.Items.Add(new Separator());
+            var toRight = scale.Side == AxisSide.Left;
+            menu.Items.Add(Item(toRight ? "Move to right side" : "Move to left side",
+                () => scale.Side = toRight ? AxisSide.Right : AxisSide.Left));
+
+            menu.Items.Add(new Separator());
+            menu.Items.Add(Item("Add scale", () => _vm.AddAxisCommand.Execute(null)));
+            menu.Items.Add(Item("Delete scale", () => _vm.RemoveAxisCommand.Execute(scale),
+                enabled: (_vm.SelectedPage?.Axes.Count ?? 0) > 1));
+
+            menu.Items.Add(new Separator());
+            menu.Items.Add(Item("Reset zoom (fit all)", () => RenderPlot(fitX: true)));
+        }
+        else
+        {
+            menu.Items.Add(Item("Add scale", () => _vm.AddAxisCommand.Execute(null)));
+            menu.Items.Add(Item("Reset zoom (fit all)", () => RenderPlot(fitX: true)));
+        }
+
+        menu.IsOpen = true;
+        e.Handled = true;
     }
 
     // Scroll wheel zooms only the shared time (X) axis, centered on the cursor.
