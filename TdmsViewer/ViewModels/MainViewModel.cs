@@ -393,7 +393,7 @@ public sealed partial class MainViewModel : ObservableObject
             AddSeriesFor(leaf.Channel!);
             leaf.IsSelected = false;
         }
-        PlotInvalidated?.Invoke(this, true);
+        PlotInvalidated?.Invoke(this, false);
     }
 
     /// <summary>Adds a single channel to the active page (used by double-click).</summary>
@@ -401,7 +401,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
         if (SelectedPage is null) return;
         AddSeriesFor(info);
-        PlotInvalidated?.Invoke(this, true);
+        PlotInvalidated?.Invoke(this, false);
     }
 
     private void AddSeriesFor(TdmsChannelInfo info)
