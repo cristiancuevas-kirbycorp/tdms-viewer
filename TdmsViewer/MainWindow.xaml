@@ -55,6 +55,67 @@
             </MenuItem>
         </Menu>
 
+        <!-- Workspace tabs: each tab is an open TDMS file -->
+        <Border DockPanel.Dock="Top" Background="#F0F0F0" BorderBrush="{StaticResource BorderLightBrush}" BorderThickness="0,0,0,1">
+            <DockPanel LastChildFill="False">
+                <ListBox DockPanel.Dock="Left" ItemsSource="{Binding Workspaces}"
+                         SelectedItem="{Binding ActiveWorkspace, Mode=TwoWay}"
+                         Background="Transparent" BorderThickness="0" Padding="0"
+                         MouseDoubleClick="WorkspaceTabs_MouseDoubleClick"
+                         ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                         ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                    <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </ListBox.ItemsPanel>
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <Border x:Name="Bd" Background="Transparent" BorderBrush="Transparent"
+                                                BorderThickness="1,1,1,0" CornerRadius="5,5,0,0" Margin="2,4,0,0" Padding="10,5">
+                                            <ContentPresenter VerticalAlignment="Center" />
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Bd" Property="Background" Value="#E6E6E6" />
+                                            </Trigger>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="Bd" Property="Background" Value="White" />
+                                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource BorderLightBrush}" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding Name}" VerticalAlignment="Center" MaxWidth="220"
+                                           TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}"
+                                           Visibility="{Binding IsEditing, Converter={StaticResource InverseBoolToVisibility}}" />
+                                <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" MinWidth="80"
+                                         IsVisibleChanged="WorkspaceRename_IsVisibleChanged" KeyDown="WorkspaceRename_KeyDown"
+                                         LostFocus="WorkspaceRename_LostFocus"
+                                         Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}" />
+                                <Button Content="&#xE711;" FontFamily="Segoe MDL2 Assets" FontSize="9"
+                                        Background="Transparent" BorderThickness="0" Padding="0" Width="18" Height="18"
+                                        Margin="6,0,0,0" VerticalAlignment="Center" Cursor="Hand" ToolTip="Close workspace"
+                                        PreviewMouseLeftButtonDown="WorkspaceClose_MouseDown" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+                <Button DockPanel.Dock="Left" Content="&#xE710;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                        Command="{Binding OpenTdmsCommand}" ToolTip="Open another TDMS file in a new workspace tab"
+                        Width="28" Height="24" Margin="4,4,0,2" Padding="0" VerticalAlignment="Center" />
+            </DockPanel>
+        </Border>
+
         <StatusBar DockPanel.Dock="Bottom">
             <StatusBarItem>
                 <TextBlock Text="{Binding StatusText}" />

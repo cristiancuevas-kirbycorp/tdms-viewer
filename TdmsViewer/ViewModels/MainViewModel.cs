@@ -38,6 +38,10 @@ public sealed partial class MainViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(AddPageCommand))]
     private bool _isFileLoaded;
 
+    /// <summary>The currently selected workspace tab.</summary>
+    [ObservableProperty]
+    private WorkspaceViewModel? _activeWorkspace;
+
     /// <summary>True when the selected tree node is a report (show report settings instead of the graph).</summary>
     [ObservableProperty]
     private bool _showReportSettings;
@@ -98,6 +102,12 @@ public sealed partial class MainViewModel : ObservableObject
     public ObservableCollection<ReportViewModel> Reports { get; } = new();
     public ObservableCollection<ChannelTreeItemViewModel> ChannelTree { get; } = new();
 
+    /// <summary>Open TDMS files shown as tabs across the top.</summary>
+    public ObservableCollection<WorkspaceViewModel> Workspaces { get; } = new();
+
+    /// <summary>Set while restoring tabs at startup so selecting a tab doesn't trigger a load.</summary>
+    private bool _suppressWorkspaceActivation;
+
     /// <summary>Flat "Group / Channel" list used by the formula channel picker.</summary>
     public ObservableCollection<string> AllChannelPaths { get; } = new();
 
@@ -142,6 +152,7 @@ public sealed partial class MainViewModel : ObservableObject
         report.Pages[0].IsSelected = true;
 
         LoadRecent();
+        LoadWorkspaces();
     }
 
     partial void OnSelectedPageChanged(PageViewModel? oldValue, PageViewModel? newValue)
@@ -194,15 +205,15 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task OpenTdms()
+    private void OpenTdms()
     {
         var dialog = new OpenFileDialog { Filter = "TDMS files (*.tdms)|*.tdms|All files (*.*)|*.*" };
         if (dialog.ShowDialog() != true) return;
-        await OpenPathAsync(dialog.FileName);
+        AddOrActivateWorkspace(dialog.FileName);
     }
 
     [RelayCommand]
-    private async Task OpenRecent(RecentFile? file)
+    private void OpenRecent(RecentFile? file)
     {
         if (file is null) return;
         if (!File.Exists(file.Path))
@@ -212,7 +223,77 @@ public sealed partial class MainViewModel : ObservableObject
             SaveRecent();
             return;
         }
-        await OpenPathAsync(file.Path);
+        AddOrActivateWorkspace(file.Path);
+    }
+
+    // --- Workspaces (tabs) ---
+
+    /// <summary>Opens the file in an existing tab if already open, otherwise adds a new tab and activates it.</summary>
+    private void AddOrActivateWorkspace(string path)
+    {
+        var existing = Workspaces.FirstOrDefault(w => string.Equals(w.Path, path, StringComparison.OrdinalIgnoreCase));
+        if (existing is not null)
+        {
+            ActiveWorkspace = existing;
+            return;
+        }
+
+        var ws = new WorkspaceViewModel(new WorkspaceModel { Name = Path.GetFileName(path), TdmsPath = path });
+        Workspaces.Add(ws);
+        ActiveWorkspace = ws;
+    }
+
+    [RelayCommand]
+    private void CloseWorkspace(WorkspaceViewModel? ws)
+    {
+        if (ws is null) return;
+        var wasActive = ReferenceEquals(ws, ActiveWorkspace);
+        var idx = Workspaces.IndexOf(ws);
+        if (wasActive) PersistConfig();
+        Workspaces.Remove(ws);
+        SaveWorkspaces();
+        if (wasActive)
+            ActiveWorkspace = Workspaces.Count == 0 ? null : Workspaces[Math.Min(idx, Workspaces.Count - 1)];
+    }
+
+    partial void OnActiveWorkspaceChanged(WorkspaceViewModel? oldValue, WorkspaceViewModel? newValue)
+    {
+        SaveWorkspaces();
+        if (_suppressWorkspaceActivation) return;
+        if (newValue is null)
+            ClearToEmpty();
+        else
+            _ = OpenPathAsync(newValue.Path);
+    }
+
+    /// <summary>Loads the active tab's file at startup (called once the window is ready).</summary>
+    public async Task RestoreActiveWorkspaceAsync()
+    {
+        if (ActiveWorkspace is { } ws && File.Exists(ws.Path))
+            await OpenPathAsync(ws.Path);
+    }
+
+    // Resets to the no-file state (welcome screen) with a fresh default report.
+    private void ClearToEmpty()
+    {
+        PersistConfig();
+        _project = new ProjectModel();
+        _allChannels = Array.Empty<TdmsChannelInfo>();
+        ChannelTree.Clear();
+        AllChannelPaths.Clear();
+        Reports.Clear();
+        var report = new ReportViewModel(new ReportModel());
+        report.Pages.Add(new PageViewModel(new PageModel()));
+        _project.Reports.Add(report.Model);
+        Reports.Add(report);
+        SelectedReport = report;
+        SelectedPage = report.Pages[0];
+        SelectedProperties.Clear();
+        PreviewData = null;
+        ShowReportSettings = false;
+        IsFileLoaded = false;
+        StatusText = "No TDMS file loaded — use File ▸ Open TDMS to begin.";
+        PlotInvalidated?.Invoke(this, true);
     }
 
     private async Task OpenPathAsync(string path)
@@ -347,6 +428,47 @@ public sealed partial class MainViewModel : ObservableObject
     {
         RecentFiles.Clear();
         SaveRecent();
+    }
+
+    // --- Workspace persistence ---
+
+    private static string WorkspaceStorePath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TdmsViewer", "workspaces.json");
+
+    public void SaveWorkspaces()
+    {
+        try
+        {
+            var store = new WorkspaceStore
+            {
+                Workspaces = Workspaces.Select(w => w.Model).ToList(),
+                ActiveIndex = ActiveWorkspace is null ? -1 : Workspaces.IndexOf(ActiveWorkspace),
+            };
+            Directory.CreateDirectory(Path.GetDirectoryName(WorkspaceStorePath)!);
+            File.WriteAllText(WorkspaceStorePath, System.Text.Json.JsonSerializer.Serialize(store));
+        }
+        catch { /* non-fatal */ }
+    }
+
+    private void LoadWorkspaces()
+    {
+        try
+        {
+            if (!File.Exists(WorkspaceStorePath)) return;
+            var store = System.Text.Json.JsonSerializer.Deserialize<WorkspaceStore>(File.ReadAllText(WorkspaceStorePath));
+            if (store is null || store.Workspaces.Count == 0) return;
+
+            _suppressWorkspaceActivation = true;
+            foreach (var m in store.Workspaces)
+                Workspaces.Add(new WorkspaceViewModel(m));
+            var idx = store.ActiveIndex >= 0 && store.ActiveIndex < Workspaces.Count ? store.ActiveIndex : 0;
+            ActiveWorkspace = Workspaces[idx];
+            _suppressWorkspaceActivation = false;
+        }
+        catch
+        {
+            _suppressWorkspaceActivation = false;
+        }
     }
 
     private void BuildChannelTree(IReadOnlyList<TdmsChannelInfo> channels)

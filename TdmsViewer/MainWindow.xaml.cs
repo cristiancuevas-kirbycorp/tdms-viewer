@@ -53,7 +53,61 @@ public partial class MainWindow : Window
         _vm.ColorPickRequested += OnColorPickRequested;
         DataContext = _vm;
 
-        Loaded += async (_, _) => await CheckForUpdatesAsync(silent: true);
+        Loaded += async (_, _) =>
+        {
+            await _vm.RestoreActiveWorkspaceAsync();
+            await CheckForUpdatesAsync(silent: true);
+        };
+    }
+
+    // --- Workspace tabs ---
+
+    private void WorkspaceTabs_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if ((e.OriginalSource as FrameworkElement)?.DataContext is WorkspaceViewModel ws)
+            ws.IsEditing = true;
+    }
+
+    // Handled on mouse-down so closing an inactive tab doesn't select (and load) it first.
+    private void WorkspaceClose_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: WorkspaceViewModel ws })
+        {
+            _vm.CloseWorkspaceCommand.Execute(ws);
+            e.Handled = true;
+        }
+    }
+
+    private void WorkspaceRename_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (sender is TextBox { IsVisible: true } tb)
+        {
+            tb.Focus();
+            tb.SelectAll();
+        }
+    }
+
+    private void WorkspaceRename_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key is Key.Enter or Key.Escape && sender is TextBox tb)
+        {
+            CommitWorkspaceRename(tb);
+            Keyboard.ClearFocus();
+        }
+    }
+
+    private void WorkspaceRename_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is TextBox tb) CommitWorkspaceRename(tb);
+    }
+
+    private void CommitWorkspaceRename(TextBox tb)
+    {
+        if (tb.DataContext is not WorkspaceViewModel ws) return;
+        if (string.IsNullOrWhiteSpace(ws.Name))
+            ws.Name = System.IO.Path.GetFileName(ws.Path);
+        ws.IsEditing = false;
+        _vm.SaveWorkspaces();
     }
 
     protected override void OnClosed(EventArgs e)
