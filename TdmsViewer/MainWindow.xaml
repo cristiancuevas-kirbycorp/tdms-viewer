@@ -81,7 +81,12 @@
                     <Button Content="Add Page" Command="{Binding AddPageCommand}" Style="{StaticResource SubtleButton}" />
                 </StackPanel>
                 <TextBlock DockPanel.Dock="Top" Text="REPORTS" Style="{StaticResource SectionHeader}" />
+                <Grid>
+                <TextBlock Text="Open a TDMS file to start building reports." TextWrapping="Wrap"
+                           Foreground="{StaticResource MutedBrush}" Margin="10" VerticalAlignment="Top"
+                           Visibility="{Binding IsFileLoaded, Converter={StaticResource InverseBoolToVisibility}}" />
                 <TreeView x:Name="ReportsTree" SelectedItemChanged="ReportsTree_SelectedItemChanged"
+                          Visibility="{Binding IsFileLoaded, Converter={StaticResource BoolToVis}}"
                           ItemsSource="{Binding Reports}">
                     <TreeView.ItemContainerStyle>
                         <Style TargetType="TreeViewItem">
@@ -98,6 +103,7 @@
                         </DataTemplate>
                     </TreeView.Resources>
                 </TreeView>
+                </Grid>
             </DockPanel>
 
             <GridSplitter Grid.Column="1" Width="4" HorizontalAlignment="Stretch" Background="{StaticResource BorderLightBrush}" />

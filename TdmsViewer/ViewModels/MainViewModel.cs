@@ -34,6 +34,8 @@ public sealed partial class MainViewModel : ObservableObject
     private string _statusText = "No TDMS file loaded — use File ▸ Open TDMS to begin.";
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(AddReportCommand))]
+    [NotifyCanExecuteChangedFor(nameof(AddPageCommand))]
     private bool _isFileLoaded;
 
     /// <summary>True when the selected tree node is a report (show report settings instead of the graph).</summary>
@@ -91,6 +93,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     private IReadOnlyList<TdmsChannelInfo> _allChannels = Array.Empty<TdmsChannelInfo>();
     private readonly DispatcherTimer _filterTimer;
+    private readonly DispatcherTimer _autoSaveTimer;
 
     public ObservableCollection<ReportViewModel> Reports { get; } = new();
     public ObservableCollection<ChannelTreeItemViewModel> ChannelTree { get; } = new();
@@ -121,6 +124,13 @@ public sealed partial class MainViewModel : ObservableObject
         {
             _filterTimer.Stop();
             BuildChannelTree(_allChannels);
+        };
+
+        _autoSaveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1500) };
+        _autoSaveTimer.Tick += (_, _) =>
+        {
+            _autoSaveTimer.Stop();
+            PersistConfig();
         };
 
         var report = new ReportViewModel(new ReportModel());
@@ -269,6 +279,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>Writes the current config to the hidden sidecar file beside the open TDMS.</summary>
     public void PersistConfig()
     {
+        _autoSaveTimer.Stop();
         if (string.IsNullOrEmpty(_project.TdmsPath)) return;
         try
         {
@@ -282,6 +293,17 @@ public sealed partial class MainViewModel : ObservableObject
             App.Log(ex);
         }
     }
+
+    /// <summary>Requests a debounced auto-save (~1.5s after the last change).</summary>
+    public void ScheduleAutoSave()
+    {
+        if (string.IsNullOrEmpty(_project.TdmsPath)) return;
+        _autoSaveTimer.Stop();
+        _autoSaveTimer.Start();
+    }
+
+    /// <summary>Add Report / Add Page are only meaningful once a TDMS is open.</summary>
+    private bool CanEditReports() => IsFileLoaded;
 
     // --- Recent files ---
 
@@ -522,7 +544,7 @@ public sealed partial class MainViewModel : ObservableObject
             : $"{FormulaExpression} {token}";
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanEditReports))]
     private void AddReport()
     {
         var report = new ReportViewModel(new ReportModel { Name = $"Report {Reports.Count + 1}" });
@@ -531,9 +553,12 @@ public sealed partial class MainViewModel : ObservableObject
         Reports.Add(report);
         SelectedReport = report;
         SelectedPage = report.Pages[0];
+        report.Pages[0].IsSelected = true;
+        ShowReportSettings = false;
+        ScheduleAutoSave();
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanEditReports))]
     private void AddPage()
     {
         if (SelectedReport is null) return;
@@ -541,6 +566,9 @@ public sealed partial class MainViewModel : ObservableObject
         SelectedReport.Model.Pages.Add(page.Model);
         SelectedReport.Pages.Add(page);
         SelectedPage = page;
+        page.IsSelected = true;
+        ShowReportSettings = false;
+        ScheduleAutoSave();
     }
 
     [RelayCommand]

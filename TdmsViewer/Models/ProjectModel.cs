@@ -50,6 +50,10 @@ public sealed class PageModel
     public string Name { get; set; } = "Graph 1";
     public List<PlotSeriesModel> Series { get; set; } = new();
     public List<AxisModel> Axes { get; set; } = new();
+
+    /// <summary>Saved time (X) view for this page; null means auto-fit. Restored when the page is reopened.</summary>
+    public double? XMin { get; set; }
+    public double? XMax { get; set; }
 }
 
 /// <summary>A first-class Y-scale (LabVIEW scale-legend style): named, sided, auto or fixed.</summary>

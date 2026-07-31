@@ -48,7 +48,7 @@ public partial class MainWindow : Window
         WpfPlot.UserInputProcessor.IsEnabled = false;
 
         _vm = new MainViewModel(new TdmsService(), new FormulaService(), new ProjectService());
-        _vm.PlotInvalidated += (_, fitX) => RenderPlot(fitX);
+        _vm.PlotInvalidated += (_, fitX) => { RenderPlot(fitX); _vm.ScheduleAutoSave(); };
         _vm.PreviewInvalidated += (_, _) => RenderPreview();
         _vm.ColorPickRequested += OnColorPickRequested;
         DataContext = _vm;
@@ -260,10 +260,19 @@ public partial class MainWindow : Window
         // Explicit, NaN-safe scaling: shared X, independent Y per axis (auto or manual).
         if (double.IsFinite(xMin) && double.IsFinite(xMax) && xMax >= xMin)
         {
-            // Keep the current time view for Y/style changes; refit only when asked.
+            var m = page.Model;
             var preserveX = !fitX && _hasPlotContent
                 && double.IsFinite(priorXLeft) && priorXRight > priorXLeft;
-            var (xa, xb) = preserveX ? (priorXLeft, priorXRight) : PadX(xMin, xMax);
+
+            // Priority: this page's saved X view, then keep current (Y/style edits), then fit.
+            double xa, xb;
+            if (m.XMin is double smin && m.XMax is double smax
+                && double.IsFinite(smin) && double.IsFinite(smax) && smax > smin)
+                (xa, xb) = (smin, smax);
+            else if (preserveX)
+                (xa, xb) = (priorXLeft, priorXRight);
+            else
+                (xa, xb) = PadX(xMin, xMax);
 
             foreach (var (axis, min, max, has, scale) in axisExtents)
             {
@@ -393,7 +402,26 @@ public partial class MainWindow : Window
 
     private void ResetZoom_Click(object sender, RoutedEventArgs e)
     {
+        if (_vm.SelectedPage is { } page)
+        {
+            page.Model.XMin = null;
+            page.Model.XMax = null;
+            _vm.ScheduleAutoSave();
+        }
         RenderPlot(fitX: true);
+    }
+
+    // Captures the current time (X) view onto the active page so reopening it restores the same zoom.
+    private void SaveCurrentXRange()
+    {
+        if (_vm.SelectedPage is not { } page) return;
+        var b = WpfPlot.Plot.Axes.Bottom;
+        if (double.IsFinite(b.Min) && double.IsFinite(b.Max) && b.Max > b.Min)
+        {
+            page.Model.XMin = b.Min;
+            page.Model.XMax = b.Max;
+            _vm.ScheduleAutoSave();
+        }
     }
 
     // Scroll wheel zooms only the shared time (X) axis, centered on the cursor.
@@ -412,6 +440,7 @@ public partial class MainWindow : Window
 
         plot.Axes.SetLimitsX(left, right);
         WpfPlot.Refresh();
+        SaveCurrentXRange();
         e.Handled = true;
     }
 
@@ -509,6 +538,7 @@ public partial class MainWindow : Window
         _panning = false;
         WpfPlot.ReleaseMouseCapture();
         WpfPlot.Cursor = Cursors.Arrow;
+        SaveCurrentXRange();
     }
 
     // --- Cursors ---
@@ -680,6 +710,7 @@ public partial class MainWindow : Window
         var half = (l.Right - l.Left) / 2 * factor;
         WpfPlot.Plot.Axes.SetLimitsX(center - half, center + half);
         WpfPlot.Refresh();
+        SaveCurrentXRange();
     }
 
     private void ZoomY(double factor)
@@ -739,6 +770,7 @@ public partial class MainWindow : Window
             Math.Min(c1.X, c2.X), Math.Max(c1.X, c2.X),
             Math.Min(c1.Y, c2.Y), Math.Max(c1.Y, c2.Y));
         WpfPlot.Refresh();
+        SaveCurrentXRange();
     }
 
     private void Exit_Click(object sender, RoutedEventArgs e) => Close();
