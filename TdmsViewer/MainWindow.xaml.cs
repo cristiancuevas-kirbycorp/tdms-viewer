@@ -175,7 +175,9 @@ public partial class MainWindow : Window
     private void RenderPlot(bool fitX = true)
     {
         var plot = WpfPlot.Plot;
-        var priorX = plot.Axes.GetLimits();
+        // Read the X (time) range from the bottom axis; GetLimits() touches Left, which may be absent.
+        var priorXLeft = plot.Axes.Bottom.Min;
+        var priorXRight = plot.Axes.Bottom.Max;
         plot.Clear();
         _rendered.Clear();
         plot.Axes.Remove(ScottPlot.Edge.Left);
@@ -184,6 +186,7 @@ public partial class MainWindow : Window
         var page = _vm.SelectedPage;
         if (page is null)
         {
+            plot.Axes.AddLeftAxis();
             WpfPlot.Refresh();
             return;
         }
@@ -242,6 +245,9 @@ public partial class MainWindow : Window
             axisExtents.Add((axis, yMin, yMax, yHas, scale));
         }
 
+        // ScottPlot's renderer requires a left axis; add a placeholder for an empty page.
+        if (axisExtents.Count == 0)
+            plot.Axes.AddLeftAxis();
 
         if (anyDateTime)
             plot.Axes.DateTimeTicksBottom();
@@ -251,8 +257,8 @@ public partial class MainWindow : Window
         {
             // Keep the current time view for Y/style changes; refit only when asked.
             var preserveX = !fitX && _hasPlotContent
-                && double.IsFinite(priorX.Left) && priorX.Right > priorX.Left;
-            var (xa, xb) = preserveX ? (priorX.Left, priorX.Right) : PadX(xMin, xMax);
+                && double.IsFinite(priorXLeft) && priorXRight > priorXLeft;
+            var (xa, xb) = preserveX ? (priorXLeft, priorXRight) : PadX(xMin, xMax);
 
             foreach (var (axis, min, max, has, scale) in axisExtents)
             {
