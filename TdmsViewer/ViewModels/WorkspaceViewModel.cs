@@ -17,6 +17,14 @@ public sealed partial class WorkspaceViewModel : ObservableObject
 
     public string Path => Model.TdmsPath;
 
+    // Cached loaded state so switching back to this tab is instant (no TDMS re-read).
+    internal IReadOnlyList<TdmsChannelInfo>? Channels;
+    internal ProjectModel? Project;
+    internal List<ReportViewModel>? ReportVms;
+    internal ReportViewModel? SelectedReport;
+    internal PageViewModel? SelectedPage;
+    internal bool Loaded => Channels is not null;
+
     public WorkspaceViewModel(WorkspaceModel model)
     {
         Model = model;

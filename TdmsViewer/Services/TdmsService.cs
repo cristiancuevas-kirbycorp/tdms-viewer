@@ -13,6 +13,9 @@ public interface ITdmsService
     /// <summary>Defragments the file in place (only when fragmented) then loads channel metadata.</summary>
     IReadOnlyList<TdmsChannelInfo> Open(string tdmsPath, bool defragment = true, IProgress<string>? progress = null);
 
+    /// <summary>Points the loader at an already-opened file (for instant workspace switching), without re-reading metadata.</summary>
+    void SetCurrentPath(string tdmsPath);
+
     /// <summary>Loads Y data for a channel, using its group's "Time Stamp" channel as X when present.</summary>
     ChannelData LoadChannel(string group, string channel);
 }
@@ -20,6 +23,8 @@ public interface ITdmsService
 public sealed class TdmsService : ITdmsService
 {
     public string? CurrentPath { get; private set; }
+
+    public void SetCurrentPath(string tdmsPath) => CurrentPath = tdmsPath;
 
     public IReadOnlyList<TdmsChannelInfo> Open(string tdmsPath, bool defragment = true, IProgress<string>? progress = null)
     {

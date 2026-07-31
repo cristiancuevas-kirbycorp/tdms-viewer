@@ -260,34 +260,88 @@ public sealed partial class MainViewModel : ObservableObject
     {
         SaveWorkspaces();
         if (_suppressWorkspaceActivation) return;
+
+        // Save the outgoing tab's live state so we can restore it instantly later.
+        if (oldValue is not null && oldValue.Loaded)
+        {
+            PersistConfig();
+            SaveActiveContext(oldValue);
+        }
+
         if (newValue is null)
             ClearToEmpty();
+        else if (newValue.Loaded)
+            RestoreContext(newValue);       // instant: no TDMS re-read
         else
-            _ = OpenPathAsync(newValue.Path);
+            _ = LoadWorkspaceAsync(newValue); // first activation: load once, then cache
     }
 
     /// <summary>Loads the active tab's file at startup (called once the window is ready).</summary>
     public async Task RestoreActiveWorkspaceAsync()
     {
         if (ActiveWorkspace is { } ws && File.Exists(ws.Path))
-            await OpenPathAsync(ws.Path);
+            await LoadWorkspaceAsync(ws);
+    }
+
+    // Snapshots the current live state into a workspace for instant restore.
+    private void SaveActiveContext(WorkspaceViewModel ws)
+    {
+        ws.Channels = _allChannels;
+        ws.Project = _project;
+        ws.ReportVms = Reports.ToList();
+        ws.SelectedReport = SelectedReport;
+        ws.SelectedPage = SelectedPage;
+    }
+
+    // Restores a previously-loaded workspace without touching the TDMS metadata again.
+    private void RestoreContext(WorkspaceViewModel ws)
+    {
+        _project = ws.Project!;
+        _allChannels = ws.Channels!;
+        _tdms.SetCurrentPath(ws.Path);
+
+        Reports.Clear();
+        foreach (var r in ws.ReportVms!) Reports.Add(r);
+        SelectedReport = ws.SelectedReport;
+        SelectedPage = ws.SelectedPage;
+
+        BuildChannelTree(_allChannels);
+        IsFileLoaded = true;
+        ShowReportSettings = false;
+        StatusText = $"{Path.GetFileName(ws.Path)} — {_allChannels.Count} channels.";
+        PlotInvalidated?.Invoke(this, true);
+    }
+
+    private async Task LoadWorkspaceAsync(WorkspaceViewModel ws)
+    {
+        ResetToDefaultProject();     // fresh report if the file has no saved config
+        await OpenPathAsync(ws.Path);
+        if (IsFileLoaded)
+            SaveActiveContext(ws);   // cache so future switches are instant
+    }
+
+    // Fresh single-report project used when a newly opened file has no sidecar config.
+    private void ResetToDefaultProject()
+    {
+        _project = new ProjectModel();
+        var report = new ReportViewModel(new ReportModel());
+        report.Pages.Add(new PageViewModel(new PageModel()));
+        _project.Reports.Add(report.Model);
+        Reports.Clear();
+        Reports.Add(report);
+        SelectedReport = report;
+        SelectedPage = report.Pages[0];
+        report.Pages[0].IsSelected = true;
     }
 
     // Resets to the no-file state (welcome screen) with a fresh default report.
     private void ClearToEmpty()
     {
         PersistConfig();
-        _project = new ProjectModel();
+        ResetToDefaultProject();
         _allChannels = Array.Empty<TdmsChannelInfo>();
         ChannelTree.Clear();
         AllChannelPaths.Clear();
-        Reports.Clear();
-        var report = new ReportViewModel(new ReportModel());
-        report.Pages.Add(new PageViewModel(new PageModel()));
-        _project.Reports.Add(report.Model);
-        Reports.Add(report);
-        SelectedReport = report;
-        SelectedPage = report.Pages[0];
         SelectedProperties.Clear();
         PreviewData = null;
         ShowReportSettings = false;
@@ -298,7 +352,6 @@ public sealed partial class MainViewModel : ObservableObject
 
     private async Task OpenPathAsync(string path)
     {
-        PersistConfig();
         var progress = new Progress<string>(m => StatusText = m);
         BusyTitle = "Loading TDMS...";
         IsBusy = true;
