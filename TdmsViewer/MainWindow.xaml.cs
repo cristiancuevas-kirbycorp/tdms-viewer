@@ -33,6 +33,7 @@ public partial class MainWindow : Window
     private int _draggingCursor = -1;
     private readonly List<(string Name, double[] X, double[] Y, string ColorHex, bool Dt)> _rendered = new();
     private bool _renderedDateTime;
+    private List<AxisViewModel> _renderedScales = new();
 
     public string AppVersion { get; }
 
@@ -351,6 +352,7 @@ public partial class MainWindow : Window
 
         _hasPlotContent = axisExtents.Any(a => a.Has);
         _renderedDateTime = _rendered.Any(r => r.Dt);
+        _renderedScales = axisExtents.Select(a => a.Scale).ToList();
         if (_cursorsOn)
             DrawCursors();
         WpfPlot.Refresh();
@@ -478,6 +480,46 @@ public partial class MainWindow : Window
         }
     }
 
+    // Maps a double-click near a Y axis to that scale's editor (title area = rename, numbers area = min/max).
+    private bool TryEditAxisAtPoint(Point p)
+    {
+        if (_renderedScales.Count == 0) return false;
+
+        var rect = WpfPlot.Plot.RenderManager.LastRender.DataRect;
+        if (rect.Width <= 0 || rect.Height <= 0) return false;
+
+        var dpi = VisualTreeHelper.GetDpi(WpfPlot);
+        var left = rect.Left / dpi.DpiScaleX;
+        var right = rect.Right / dpi.DpiScaleX;
+        var top = rect.Top / dpi.DpiScaleY;
+        var bottom = rect.Bottom / dpi.DpiScaleY;
+
+        if (p.Y < top - 4 || p.Y > bottom + 4) return false;
+
+        AxisSide side;
+        bool titleArea;
+        if (p.X < left)
+        {
+            side = AxisSide.Left;
+            titleArea = p.X < left * 0.5;                       // outer half holds the rotated title
+        }
+        else if (p.X > right)
+        {
+            side = AxisSide.Right;
+            titleArea = p.X > right + (WpfPlot.ActualWidth - right) * 0.5;
+        }
+        else
+        {
+            return false;                                        // click was inside the data area
+        }
+
+        var scale = _renderedScales.FirstOrDefault(s => s.Side == side);
+        if (scale is null) return false;
+
+        new ScaleEditorWindow(scale, focusName: titleArea) { Owner = this }.ShowDialog();
+        return true;
+    }
+
     // Scroll wheel zooms only the shared time (X) axis, centered on the cursor.
     private void Plot_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
@@ -501,6 +543,13 @@ public partial class MainWindow : Window
     // Left-drag pans the time (X) axis only; Y axes stay put. With cursors on, grabs a nearby cursor instead.
     private void Plot_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        // Double-click on a Y-axis: edit its name (title area) or min/max (numbers area).
+        if (e.ClickCount == 2 && TryEditAxisAtPoint(e.GetPosition(WpfPlot)))
+        {
+            e.Handled = true;
+            return;
+        }
+
         var plot = WpfPlot.Plot;
         var dpi = VisualTreeHelper.GetDpi(WpfPlot);
         var p = e.GetPosition(WpfPlot);

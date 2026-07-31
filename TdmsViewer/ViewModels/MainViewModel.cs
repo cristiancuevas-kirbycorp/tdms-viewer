@@ -179,6 +179,7 @@ public sealed partial class MainViewModel : ObservableObject
         if (_syncingChecks || e.PropertyName != nameof(ChannelTreeItemViewModel.IsSelected)) return;
         if (sender is not ChannelTreeItemViewModel { Channel: { } info } leaf || SelectedPage is null) return;
 
+        var wasEmpty = SelectedPage.Series.Count == 0;
         var existing = SelectedPage.Series.FirstOrDefault(s => SeriesMatches(s, info));
         if (leaf.IsSelected)
         {
@@ -189,7 +190,18 @@ public sealed partial class MainViewModel : ObservableObject
             SelectedPage.Series.Remove(existing);
             SelectedPage.Model.Series.Remove(existing.Model);
         }
-        PlotInvalidated?.Invoke(this, false);
+        RaisePlotAfterAdd(wasEmpty && leaf.IsSelected);
+    }
+
+    // First plot on a page auto-fits X and Y; later plots keep the current time view.
+    private void RaisePlotAfterAdd(bool fitFirst)
+    {
+        if (fitFirst && SelectedPage is not null)
+        {
+            SelectedPage.Model.XMin = null;
+            SelectedPage.Model.XMax = null;
+        }
+        PlotInvalidated?.Invoke(this, fitFirst);
     }
 
     private static bool SeriesMatches(SeriesViewModel s, TdmsChannelInfo info) =>
@@ -679,20 +691,22 @@ public sealed partial class MainViewModel : ObservableObject
     {
         if (SelectedPage is null) return;
 
+        var wasEmpty = SelectedPage.Series.Count == 0;
         foreach (var leaf in ChannelTree.SelectMany(g => g.Children).Where(c => c.IsSelected && c.Channel is not null))
         {
             AddSeriesFor(leaf.Channel!);
             leaf.IsSelected = false;
         }
-        PlotInvalidated?.Invoke(this, false);
+        RaisePlotAfterAdd(wasEmpty);
     }
 
     /// <summary>Adds a single channel to the active page (used by double-click).</summary>
     public void AddChannel(TdmsChannelInfo info)
     {
         if (SelectedPage is null) return;
+        var wasEmpty = SelectedPage.Series.Count == 0;
         AddSeriesFor(info);
-        PlotInvalidated?.Invoke(this, false);
+        RaisePlotAfterAdd(wasEmpty);
     }
 
     private void AddSeriesFor(TdmsChannelInfo info)
