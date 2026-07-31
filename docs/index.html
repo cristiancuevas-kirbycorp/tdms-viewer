@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TDMS Viewer — Download</title>
+<meta name="description" content="Open, graph, and analyze NI TDMS files on Windows. Free, no LabVIEW required." />
+<style>
+  :root {
+    --accent: #2d7dd2;
+    --accent-dark: #1f5fa8;
+    --bg: #f2f4f7;
+    --card: #ffffff;
+    --text: #1f2937;
+    --muted: #6b7280;
+    --border: #e1e5ea;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    color: var(--text);
+    background: linear-gradient(180deg, #eaf2fb 0%, var(--bg) 40%);
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 64px 24px 80px; }
+  header { text-align: center; }
+  .logo {
+    width: 68px; height: 68px; border-radius: 16px; margin: 0 auto 20px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--accent); color: #fff; font-size: 34px; font-weight: 700;
+    box-shadow: 0 8px 24px rgba(45,125,210,.35);
+  }
+  h1 { font-size: 42px; margin: 0 0 10px; letter-spacing: -.5px; }
+  .tagline { font-size: 19px; color: var(--muted); max-width: 620px; margin: 0 auto 32px; line-height: 1.5; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 10px;
+    background: var(--accent); color: #fff; text-decoration: none;
+    font-size: 18px; font-weight: 600; padding: 15px 28px; border-radius: 10px;
+    box-shadow: 0 6px 18px rgba(45,125,210,.35); transition: background .15s, transform .05s;
+  }
+  .btn:hover { background: var(--accent-dark); }
+  .btn:active { transform: translateY(1px); }
+  .sub { margin-top: 12px; color: var(--muted); font-size: 14px; }
+  .sub a { color: var(--accent-dark); }
+  .grid {
+    margin-top: 56px; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 18px;
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 20px 22px;
+  }
+  .card h3 { margin: 0 0 8px; font-size: 16px; }
+  .card p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+  .steps {
+    margin-top: 48px; background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 8px 26px;
+  }
+  .steps li { margin: 14px 0; line-height: 1.55; }
+  footer { text-align: center; margin-top: 56px; color: var(--muted); font-size: 14px; }
+  footer a { color: var(--accent-dark); }
+  code { background: #eef2f7; padding: 2px 6px; border-radius: 5px; font-size: 13px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="logo">TV</div>
+      <h1>TDMS Viewer</h1>
+      <p class="tagline">
+        Open, defragment, graph, and analyze National Instruments <strong>TDMS</strong> files on Windows —
+        multi-axis plots, calculated channels, and draggable cursors. No LabVIEW or DIAdem required.
+      </p>
+      <a class="btn" href="https://github.com/cristiancuevas-kirbycorp/tdms-viewer/releases/latest/download/TdmsViewer.exe">
+        &#x2B07;&nbsp; Download for Windows
+      </a>
+      <div class="sub">
+        Windows 10/11 · 64-bit · single file, no install &middot;
+        <a href="https://github.com/cristiancuevas-kirbycorp/tdms-viewer/releases">all releases</a>
+      </div>
+    </header>
+
+    <div class="grid">
+      <div class="card">
+        <h3>Data Portal</h3>
+        <p>Browse groups and channels with units, a live properties table, and a preview graph. Smart multi-word search with highlighting.</p>
+      </div>
+      <div class="card">
+        <h3>Multi-axis plotting</h3>
+        <p>Named Y-scales you assign plots to, with left/right side and auto or fixed min/max. Reports and pages, savable as a project.</p>
+      </div>
+      <div class="card">
+        <h3>Cursors &amp; stats</h3>
+        <p>Two draggable time cursors with a shaded band and a readout of each plot's value at A/B, the delta, and min/max/avg between them.</p>
+      </div>
+      <div class="card">
+        <h3>Calculated channels</h3>
+        <p>Build new channels from math expressions across existing channels, then plot them like any other signal.</p>
+      </div>
+    </div>
+
+    <ol class="steps">
+      <li><strong>Download</strong> the button above &mdash; it's a single self-contained <code>.exe</code>, no .NET install needed.</li>
+      <li><strong>Run it.</strong> Windows SmartScreen may warn on first launch (unsigned app) &mdash; click <em>More info &rarr; Run anyway</em>.</li>
+      <li><strong>Open a TDMS file</strong> via <code>File &rarr; Open TDMS</code> and start plotting.</li>
+    </ol>
+
+    <footer>
+      Open source &middot;
+      <a href="https://github.com/cristiancuevas-kirbycorp/tdms-viewer">github.com/cristiancuevas-kirbycorp/tdms-viewer</a>
+    </footer>
+  </div>
+</body>
+</html>
