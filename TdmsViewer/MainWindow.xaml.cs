@@ -245,9 +245,12 @@ public partial class MainWindow : Window
             axisExtents.Add((axis, yMin, yMax, yHas, scale));
         }
 
-        // ScottPlot's renderer requires a left axis; add a placeholder for an empty page.
-        if (axisExtents.Count == 0)
-            plot.Axes.AddLeftAxis();
+        // ScottPlot's renderer requires a left axis; add a hidden placeholder when all scales are right-side.
+        if (!axisExtents.Any(a => a.Scale.Side == AxisSide.Left))
+        {
+            var placeholder = plot.Axes.AddLeftAxis();
+            placeholder.IsVisible = axisExtents.Count == 0;
+        }
 
         if (anyDateTime)
             plot.Axes.DateTimeTicksBottom();
