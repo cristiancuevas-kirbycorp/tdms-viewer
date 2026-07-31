@@ -38,8 +38,14 @@ public sealed class TdmsService : ITdmsService
 
         var channels = new List<TdmsChannelInfo>();
         using var file = new TdmsFile(CurrentPath).Open();
+        var rootProps = file.Properties.ToDictionary(
+            p => p.Key,
+            p => p.Value?.ToString() ?? string.Empty);
         foreach (var group in file.Groups.Values)
         {
+            var groupProps = group.Properties.ToDictionary(
+                p => p.Key,
+                p => p.Value?.ToString() ?? string.Empty);
             foreach (var channel in group.Channels.Values)
             {
                 var props = channel.Properties.ToDictionary(
@@ -56,6 +62,8 @@ public sealed class TdmsService : ITdmsService
                     Count = channel.DataCount,
                     DataType = channel.DataType?.Name ?? "Double",
                     Properties = props,
+                    GroupProperties = groupProps,
+                    RootProperties = rootProps,
                 });
             }
         }

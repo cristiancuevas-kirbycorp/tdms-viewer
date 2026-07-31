@@ -411,39 +411,35 @@
 
                     <DockPanel Grid.Row="2">
                         <TextBlock DockPanel.Dock="Top" Text="PROPERTIES" Style="{StaticResource SectionHeader}" />
-                        <DataGrid ItemsSource="{Binding Source={StaticResource PropView}}" AutoGenerateColumns="False"
-                                  CanUserAddRows="False" HeadersVisibility="Column" IsReadOnly="True"
-                                  GridLinesVisibility="Horizontal"
-                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                            <DataGrid.Columns>
-                                <DataGridTextColumn Header="Property" Binding="{Binding Name}" Width="Auto" MinWidth="80" />
-                                <DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="*" />
-                            </DataGrid.Columns>
-                            <DataGrid.GroupStyle>
-                                <GroupStyle>
-                                    <GroupStyle.HeaderTemplate>
-                                        <DataTemplate>
-                                            <TextBlock Text="{Binding Name}" FontWeight="Bold" Background="#F0F0F0"
-                                                       Padding="4,2" Margin="0,2,0,0" />
-                                        </DataTemplate>
-                                    </GroupStyle.HeaderTemplate>
-                                    <GroupStyle.ContainerStyle>
-                                        <Style TargetType="{x:Type GroupItem}">
-                                            <Setter Property="Template">
-                                                <Setter.Value>
-                                                    <ControlTemplate TargetType="{x:Type GroupItem}">
-                                                        <StackPanel>
-                                                            <ContentPresenter />
-                                                            <ItemsPresenter />
-                                                        </StackPanel>
-                                                    </ControlTemplate>
-                                                </Setter.Value>
-                                            </Setter>
-                                        </Style>
-                                    </GroupStyle.ContainerStyle>
-                                </GroupStyle>
-                            </DataGrid.GroupStyle>
-                        </DataGrid>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl ItemsSource="{Binding Source={StaticResource PropView}}"
+                                          Grid.IsSharedSizeScope="True">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" MinWidth="70" MaxWidth="200" SharedSizeGroup="PropName" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{Binding Name}" Margin="4,2,12,2"
+                                                       TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}" />
+                                            <TextBlock Grid.Column="1" Text="{Binding Value}" Margin="0,2,4,2"
+                                                       TextTrimming="CharacterEllipsis" ToolTip="{Binding Value}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                                <ItemsControl.GroupStyle>
+                                    <GroupStyle>
+                                        <GroupStyle.HeaderTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Name}" FontWeight="Bold" Background="#F0F0F0"
+                                                           Padding="4,2" Margin="0,4,0,0" />
+                                            </DataTemplate>
+                                        </GroupStyle.HeaderTemplate>
+                                    </GroupStyle>
+                                </ItemsControl.GroupStyle>
+                            </ItemsControl>
+                        </ScrollViewer>
                     </DockPanel>
 
                     <GridSplitter Grid.Row="3" Height="4" HorizontalAlignment="Stretch" Background="{StaticResource BorderLightBrush}" />

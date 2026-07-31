@@ -333,6 +333,12 @@ public sealed partial class MainViewModel : ObservableObject
         foreach (var kv in info.Properties.Where(p => !HiddenProps.Contains(p.Key)).OrderBy(p => p.Key))
             Add("Custom Properties", kv.Key, kv.Value);
 
+        foreach (var kv in info.GroupProperties.OrderBy(p => p.Key))
+            Add("Group Properties", kv.Key, kv.Value);
+
+        foreach (var kv in info.RootProperties.OrderBy(p => p.Key))
+            Add("File Properties", kv.Key, kv.Value);
+
         PreviewData = null;
         PreviewInvalidated?.Invoke(this, EventArgs.Empty);
         StatusText = $"Loading '{info.Name}'...";

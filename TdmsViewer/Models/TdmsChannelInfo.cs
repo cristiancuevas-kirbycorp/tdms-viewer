@@ -16,6 +16,14 @@ public sealed class TdmsChannelInfo
     public IReadOnlyDictionary<string, string> Properties { get; init; } =
         new Dictionary<string, string>();
 
+    /// <summary>Properties of the owning group.</summary>
+    public IReadOnlyDictionary<string, string> GroupProperties { get; init; } =
+        new Dictionary<string, string>();
+
+    /// <summary>File (root) level properties.</summary>
+    public IReadOnlyDictionary<string, string> RootProperties { get; init; } =
+        new Dictionary<string, string>();
+
     /// <summary>True when this channel is the group's shared time axis.</summary>
     public bool IsTimeStamp =>
         string.Equals(Name, TimeStampChannelName, StringComparison.OrdinalIgnoreCase);
