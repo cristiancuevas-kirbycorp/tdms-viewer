@@ -170,7 +170,7 @@
                             <DataGridTemplateColumn Header="Line" Width="80">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
-                                        <ComboBox SelectedItem="{Binding LineStyle}"
+                                        <ComboBox SelectedItem="{Binding LineStyle, UpdateSourceTrigger=PropertyChanged}"
                                                   ItemsSource="{Binding Source={x:Static vm:SeriesViewModel.LineStyleOptions}}" />
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
@@ -178,7 +178,7 @@
                             <DataGridTemplateColumn Header="Marker" Width="80">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
-                                        <ComboBox SelectedItem="{Binding Marker}"
+                                        <ComboBox SelectedItem="{Binding Marker, UpdateSourceTrigger=PropertyChanged}"
                                                   ItemsSource="{Binding Source={x:Static vm:SeriesViewModel.MarkerOptions}}" />
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
@@ -219,7 +219,7 @@
                                 <DataGridTemplateColumn Header="Side" Width="70">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
-                                            <ComboBox SelectedItem="{Binding Side}"
+                                            <ComboBox SelectedItem="{Binding Side, UpdateSourceTrigger=PropertyChanged}"
                                                       ItemsSource="{Binding Source={x:Static vm:AxisViewModel.SideOptions}}" />
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
@@ -242,7 +242,7 @@
                     </DockPanel>
                 </Grid>
 
-                <Grid AllowDrop="True" DragOver="Plot_DragOver" Drop="Plot_Drop">
+                <Grid AllowDrop="True" DragOver="Plot_DragOver" Drop="Plot_Drop" ClipToBounds="True">
                     <sp:WpfPlot x:Name="WpfPlot" PreviewMouseWheel="Plot_PreviewMouseWheel"
                                 MouseLeftButtonDown="Plot_MouseLeftButtonDown"
                                 MouseMove="Plot_MouseMove"
