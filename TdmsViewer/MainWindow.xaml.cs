@@ -119,8 +119,16 @@ public partial class MainWindow : Window
 
     private static T? FindAncestor<T>(DependencyObject? current) where T : DependencyObject
     {
+        // Runs/inlines are content elements, not visuals, so walk logical parents for those.
         while (current is not null and not T)
-            current = VisualTreeHelper.GetParent(current);
+        {
+            current = current switch
+            {
+                Visual or System.Windows.Media.Media3D.Visual3D => VisualTreeHelper.GetParent(current),
+                FrameworkContentElement fce => fce.Parent,
+                _ => LogicalTreeHelper.GetParent(current),
+            };
+        }
         return current as T;
     }
 
@@ -448,7 +456,22 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (!_panning) return;
+        if (!_panning)
+        {
+            // Hovering over a cursor line shows the resize (left/right) cursor to hint it's draggable.
+            if (_cursorsOn && _cursorLines.Count == 2)
+            {
+                var dpi = VisualTreeHelper.GetDpi(WpfPlot);
+                var p = e.GetPosition(WpfPlot);
+                var dataX = plot.GetCoordinates(new Pixel((float)(p.X * dpi.DpiScaleX), (float)(p.Y * dpi.DpiScaleY))).X;
+                var perPixel = Math.Abs(
+                    plot.GetCoordinates(new Pixel((float)((p.X + 1) * dpi.DpiScaleX), (float)(p.Y * dpi.DpiScaleY))).X - dataX);
+                var tol = perPixel * 6;
+                WpfPlot.Cursor = _cursorX.Any(cx => Math.Abs(cx - dataX) <= tol) ? Cursors.SizeWE : Cursors.Arrow;
+            }
+            return;
+        }
+
         var dx = e.GetPosition(WpfPlot).X - _panStartPixel.X;
         var shift = -dx * _panDataPerPixel;
         plot.Axes.SetLimitsX(_panStartLimits.Left + shift, _panStartLimits.Right + shift);

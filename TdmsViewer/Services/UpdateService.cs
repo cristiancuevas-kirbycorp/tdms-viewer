@@ -93,18 +93,34 @@ public sealed class UpdateService : IUpdateService
     {
         var exePath = Environment.ProcessPath
             ?? throw new InvalidOperationException("Cannot locate the running executable.");
+        var exeDir = Path.GetDirectoryName(exePath) ?? ".";
+        var pid = Environment.ProcessId;
 
-        // A tiny script waits for this exe to unlock, swaps in the new file, and relaunches.
+        // Waits for this process to exit, swaps in the new exe, relaunches it, and logs each step.
         var script = Path.Combine(Path.GetTempPath(), $"tdmsviewer_update_{Guid.NewGuid():N}.cmd");
         File.WriteAllText(script, $"""
             @echo off
-            :retry
+            cd /d "{exeDir}"
+            set "LOG={exeDir}\update.log"
+            echo [%date% %time%] update start pid={pid}>> "%LOG%"
+            :waitloop
+            tasklist /fi "PID eq {pid}" 2>nul | find "{pid}" >nul
+            if errorlevel 1 goto swap
+            set /a w+=1
+            if %w% GEQ 120 (echo [%date% %time%] timed out waiting>> "%LOG%" & goto done)
+            ping -n 2 127.0.0.1 >nul
+            goto waitloop
+            :swap
             move /y "{newExePath}" "{exePath}" >nul 2>&1
-            if errorlevel 1 (
-              ping -n 2 127.0.0.1 >nul
-              goto retry
-            )
+            if not errorlevel 1 goto launch
+            set /a m+=1
+            if %m% GEQ 30 (echo [%date% %time%] swap failed>> "%LOG%" & goto done)
+            ping -n 2 127.0.0.1 >nul
+            goto swap
+            :launch
+            echo [%date% %time%] launching new version>> "%LOG%"
             start "" "{exePath}"
+            :done
             del "%~f0"
             """);
 

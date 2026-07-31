@@ -334,17 +334,14 @@
                     <TextBlock Text="DATA PORTAL" Style="{StaticResource SectionHeader}" Margin="0,0,0,4" />
                     <TextBox Text="{Binding ChannelFilter, UpdateSourceTrigger=PropertyChanged}"
                              ToolTip="Search groups and channels. Multiple words all must match (e.g. 'AFE voltage')." />
-                    <DockPanel Margin="0,4,0,0">
-                        <TextBlock DockPanel.Dock="Left" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"
-                                   VerticalAlignment="Center"
-                                   Text="Tick a channel to add it (or double-click / drag)." />
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                            <Button Style="{StaticResource IconButton}" Width="26" Content="&#xE710;"
-                                    Command="{Binding ExpandAllCommand}" ToolTip="Expand all groups" />
-                            <Button Style="{StaticResource IconButton}" Width="26" Content="&#xE738;"
-                                    Command="{Binding CollapseAllCommand}" ToolTip="Collapse all groups" />
-                        </StackPanel>
-                    </DockPanel>
+                    <TextBlock Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,4,0,0"
+                               Text="Tick a channel to add it (or double-click / drag)." />
+                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                        <Button Content="Expand all" Style="{StaticResource SubtleButton}" Padding="10,3" Margin="0,0,6,0"
+                                Command="{Binding ExpandAllCommand}" ToolTip="Expand all groups" />
+                        <Button Content="Collapse all" Style="{StaticResource SubtleButton}" Padding="10,3"
+                                Command="{Binding CollapseAllCommand}" ToolTip="Collapse all groups" />
+                    </StackPanel>
                 </StackPanel>
 
                 <Expander DockPanel.Dock="Bottom" Header="Calculated Channels" IsExpanded="False" Margin="6">
