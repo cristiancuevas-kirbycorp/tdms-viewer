@@ -257,7 +257,7 @@
                     </Canvas>
                     <Border Background="#B0FFFFFF" Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}">
                         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <TextBlock Text="Loading TDMS..." FontSize="16" FontWeight="Bold"
+                            <TextBlock Text="{Binding BusyTitle}" FontSize="16" FontWeight="Bold"
                                        HorizontalAlignment="Center" Margin="0,0,0,8" />
                             <ProgressBar Width="240" Height="16" IsIndeterminate="True" />
                             <TextBlock Text="{Binding StatusText}" Foreground="#555"

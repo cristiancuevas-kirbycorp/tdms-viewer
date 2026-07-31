@@ -57,6 +57,9 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private bool _isBusy;
 
+    [ObservableProperty]
+    private string _busyTitle = "Loading TDMS...";
+
     private IReadOnlyList<TdmsChannelInfo> _allChannels = Array.Empty<TdmsChannelInfo>();
     private readonly DispatcherTimer _filterTimer;
 
@@ -135,7 +138,7 @@ public sealed partial class MainViewModel : ObservableObject
             SelectedPage.Series.Remove(existing);
             SelectedPage.Model.Series.Remove(existing.Model);
         }
-        PlotInvalidated?.Invoke(this, true);
+        PlotInvalidated?.Invoke(this, false);
     }
 
     private static bool SeriesMatches(SeriesViewModel s, TdmsChannelInfo info) =>
@@ -175,6 +178,7 @@ public sealed partial class MainViewModel : ObservableObject
     private async Task OpenPathAsync(string path)
     {
         var progress = new Progress<string>(m => StatusText = m);
+        BusyTitle = "Loading TDMS...";
         IsBusy = true;
         try
         {
@@ -533,6 +537,7 @@ public sealed partial class MainViewModel : ObservableObject
         {
             var path = _project.TdmsPath;
             var progress = new Progress<string>(m => StatusText = m);
+            BusyTitle = "Loading TDMS...";
             IsBusy = true;
             try
             {

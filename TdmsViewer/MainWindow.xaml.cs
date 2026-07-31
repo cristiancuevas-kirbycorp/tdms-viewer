@@ -764,6 +764,7 @@ public partial class MainWindow : Window
         try
         {
             _vm.IsBusy = true;
+            _vm.BusyTitle = "Updating...";
             _vm.StatusText = "Downloading update...";
             var progress = new Progress<double>(p => _vm.StatusText = $"Downloading update... {p:P0}");
             var newExe = await _update.DownloadAsync(info.DownloadUrl, progress);
