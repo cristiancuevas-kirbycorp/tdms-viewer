@@ -61,19 +61,23 @@
   footer { text-align: center; margin-top: 56px; color: var(--muted); font-size: 14px; }
   footer a { color: var(--accent-dark); }
   code { background: #eef2f7; padding: 2px 6px; border-radius: 5px; font-size: 13px; }
+  .badge {
+    display: inline-block; background: #f59e0b; color: #fff; font-size: 12px; font-weight: 700;
+    letter-spacing: .5px; padding: 3px 9px; border-radius: 999px; vertical-align: middle; margin-left: 8px;
+  }
 </style>
 </head>
 <body>
   <div class="wrap">
     <header>
       <div class="logo">TV</div>
-      <h1>TDMS Viewer</h1>
+      <h1>TDMS Viewer <span class="badge">BETA</span></h1>
       <p class="tagline">
         Open, defragment, graph, and analyze National Instruments <strong>TDMS</strong> files on Windows —
         multi-axis plots, calculated channels, and draggable cursors. No LabVIEW or DIAdem required.
       </p>
-      <a class="btn" href="https://github.com/cristiancuevas-kirbycorp/tdms-viewer/releases/latest/download/TdmsViewer.exe">
-        &#x2B07;&nbsp; Download for Windows
+      <a class="btn" href="https://github.com/cristiancuevas-kirbycorp/tdms-viewer/releases/download/beta/TdmsViewer.exe">
+        &#x2B07;&nbsp; Download the Beta (Windows)
       </a>
       <div class="sub">
         Windows 10/11 · 64-bit · single file, no install &middot;
