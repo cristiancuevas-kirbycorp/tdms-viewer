@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using Microsoft.Win32;
 using TdmsViewer.Models;
 
 namespace TdmsViewer.ViewModels;
@@ -167,6 +169,12 @@ public sealed partial class PageViewModel : ObservableObject
     [ObservableProperty]
     private string _name;
 
+    [ObservableProperty]
+    private bool _isSelected;
+
+    [ObservableProperty]
+    private bool _isExpanded;
+
     public PageModel Model { get; }
     public ObservableCollection<SeriesViewModel> Series { get; } = new();
     public ObservableCollection<AxisViewModel> Axes { get; } = new();
@@ -270,16 +278,97 @@ public sealed partial class ReportViewModel : ObservableObject
     [ObservableProperty]
     private string _name;
 
+    [ObservableProperty]
+    private bool _isSelected;
+
+    [ObservableProperty]
+    private bool _isExpanded = true;
+
+    [ObservableProperty]
+    private string _title;
+
+    [ObservableProperty]
+    private ReportSlot _headerLeft;
+
+    [ObservableProperty]
+    private ReportSlot _headerMiddle;
+
+    [ObservableProperty]
+    private ReportSlot _headerRight;
+
+    [ObservableProperty]
+    private ReportSlot _footerLeft;
+
+    [ObservableProperty]
+    private ReportSlot _footerMiddle;
+
+    [ObservableProperty]
+    private ReportSlot _footerRight;
+
+    [ObservableProperty]
+    private string _customText;
+
+    [ObservableProperty]
+    private string? _customImagePath;
+
     public ReportModel Model { get; }
     public ObservableCollection<PageViewModel> Pages { get; } = new();
+
+    /// <summary>Options for the header/footer position dropdowns.</summary>
+    public static IReadOnlyList<ReportSlotOption> SlotOptions { get; } = new[]
+    {
+        new ReportSlotOption(ReportSlot.None, "(none)"),
+        new ReportSlotOption(ReportSlot.ReportName, "Report Name"),
+        new ReportSlotOption(ReportSlot.Date, "Date"),
+        new ReportSlotOption(ReportSlot.DateTime, "Date & Time"),
+        new ReportSlotOption(ReportSlot.PageNumber, "Page X of Y"),
+        new ReportSlotOption(ReportSlot.FileName, "File Name"),
+        new ReportSlotOption(ReportSlot.CustomText, "Custom Text"),
+        new ReportSlotOption(ReportSlot.CustomImage, "Custom Image"),
+    };
 
     public ReportViewModel(ReportModel model)
     {
         Model = model;
         _name = model.Name;
+        _title = model.Title;
+        _headerLeft = model.HeaderLeft;
+        _headerMiddle = model.HeaderMiddle;
+        _headerRight = model.HeaderRight;
+        _footerLeft = model.FooterLeft;
+        _footerMiddle = model.FooterMiddle;
+        _footerRight = model.FooterRight;
+        _customText = model.CustomText;
+        _customImagePath = model.CustomImagePath;
         foreach (var p in model.Pages)
             Pages.Add(new PageViewModel(p));
     }
 
+    [RelayCommand]
+    private void BrowseCustomImage()
+    {
+        var dialog = new OpenFileDialog
+        {
+            Filter = "Images (*.png;*.jpg;*.jpeg;*.bmp)|*.png;*.jpg;*.jpeg;*.bmp|All files (*.*)|*.*",
+        };
+        if (dialog.ShowDialog() == true)
+            CustomImagePath = dialog.FileName;
+    }
+
+    [RelayCommand]
+    private void ClearCustomImage() => CustomImagePath = null;
+
     partial void OnNameChanged(string value) => Model.Name = value;
+    partial void OnTitleChanged(string value) => Model.Title = value;
+    partial void OnHeaderLeftChanged(ReportSlot value) => Model.HeaderLeft = value;
+    partial void OnHeaderMiddleChanged(ReportSlot value) => Model.HeaderMiddle = value;
+    partial void OnHeaderRightChanged(ReportSlot value) => Model.HeaderRight = value;
+    partial void OnFooterLeftChanged(ReportSlot value) => Model.FooterLeft = value;
+    partial void OnFooterMiddleChanged(ReportSlot value) => Model.FooterMiddle = value;
+    partial void OnFooterRightChanged(ReportSlot value) => Model.FooterRight = value;
+    partial void OnCustomTextChanged(string value) => Model.CustomText = value;
+    partial void OnCustomImagePathChanged(string? value) => Model.CustomImagePath = value;
 }
+
+/// <summary>A selectable option for a header/footer position.</summary>
+public sealed record ReportSlotOption(ReportSlot Value, string Label);

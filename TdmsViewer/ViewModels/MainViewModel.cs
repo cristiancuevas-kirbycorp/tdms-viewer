@@ -31,7 +31,14 @@ public sealed partial class MainViewModel : ObservableObject
     public event EventHandler<bool>? PlotInvalidated;
 
     [ObservableProperty]
-    private string _statusText = "Ready.";
+    private string _statusText = "No TDMS file loaded — use File ▸ Open TDMS to begin.";
+
+    [ObservableProperty]
+    private bool _isFileLoaded;
+
+    /// <summary>True when the selected tree node is a report (show report settings instead of the graph).</summary>
+    [ObservableProperty]
+    private bool _showReportSettings;
 
     [ObservableProperty]
     private ReportViewModel? _selectedReport;
@@ -100,6 +107,7 @@ public sealed partial class MainViewModel : ObservableObject
         Reports.Add(report);
         SelectedReport = report;
         SelectedPage = report.Pages[0];
+        report.Pages[0].IsSelected = true;
 
         LoadRecent();
     }
@@ -189,6 +197,7 @@ public sealed partial class MainViewModel : ObservableObject
             _project.TdmsPath = path;
             BuildChannelTree(channels);
             AddRecent(path);
+            IsFileLoaded = true;
             PlotInvalidated?.Invoke(this, true);
             StatusText = $"Loaded {channels.Count} channels from {Path.GetFileName(path)}.";
         }
@@ -225,6 +234,9 @@ public sealed partial class MainViewModel : ObservableObject
             }
             SelectedReport = Reports.FirstOrDefault();
             SelectedPage = SelectedReport?.Pages.FirstOrDefault();
+            if (SelectedReport is not null) SelectedReport.IsExpanded = true;
+            if (SelectedPage is not null) SelectedPage.IsSelected = true;
+            ShowReportSettings = false;
         }
         catch (Exception ex)
         {
@@ -588,6 +600,9 @@ public sealed partial class MainViewModel : ObservableObject
             Reports.Add(new ReportViewModel(r));
         SelectedReport = Reports.FirstOrDefault();
         SelectedPage = SelectedReport?.Pages.FirstOrDefault();
+        if (SelectedReport is not null) SelectedReport.IsExpanded = true;
+        if (SelectedPage is not null) SelectedPage.IsSelected = true;
+        ShowReportSettings = false;
 
         if (!string.IsNullOrEmpty(_project.TdmsPath) && File.Exists(_project.TdmsPath))
         {
@@ -601,6 +616,7 @@ public sealed partial class MainViewModel : ObservableObject
                 _allChannels = channels;
                 BuildChannelTree(channels);
                 AddRecent(path);
+                IsFileLoaded = true;
             }
             catch (Exception ex)
             {

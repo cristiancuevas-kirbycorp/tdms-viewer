@@ -69,9 +69,11 @@ public partial class MainWindow : Window
             case ReportViewModel report:
                 _vm.SelectedReport = report;
                 _vm.SelectedPage = report.Pages.FirstOrDefault();
+                _vm.ShowReportSettings = true;
                 break;
             case PageViewModel page:
                 _vm.SelectedPage = page;
+                _vm.ShowReportSettings = false;
                 break;
         }
     }

@@ -66,7 +66,37 @@ public sealed class AxisModel
 public sealed class ReportModel
 {
     public string Name { get; set; } = "Report 1";
+
+    /// <summary>Title used in the printed report header/footer.</summary>
+    public string Title { get; set; } = "Report 1";
+
+    public ReportSlot HeaderLeft { get; set; } = ReportSlot.ReportName;
+    public ReportSlot HeaderMiddle { get; set; } = ReportSlot.Date;
+    public ReportSlot HeaderRight { get; set; } = ReportSlot.None;
+    public ReportSlot FooterLeft { get; set; } = ReportSlot.None;
+    public ReportSlot FooterMiddle { get; set; } = ReportSlot.Date;
+    public ReportSlot FooterRight { get; set; } = ReportSlot.PageNumber;
+
+    /// <summary>Free text shown where a slot is set to <see cref="ReportSlot.CustomText"/>.</summary>
+    public string CustomText { get; set; } = string.Empty;
+
+    /// <summary>Image shown where a slot is set to <see cref="ReportSlot.CustomImage"/>.</summary>
+    public string? CustomImagePath { get; set; }
+
     public List<PageModel> Pages { get; set; } = new();
+}
+
+/// <summary>Content options for a report header/footer position.</summary>
+public enum ReportSlot
+{
+    None,
+    ReportName,
+    Date,
+    DateTime,
+    PageNumber,
+    FileName,
+    CustomText,
+    CustomImage,
 }
 
 /// <summary>Root savable document (*.tvproj).</summary>
