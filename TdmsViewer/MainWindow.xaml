@@ -50,6 +50,7 @@
             </MenuItem>
             <MenuItem Header="_Print/Save" Click="PrintSave_Click" />
             <MenuItem Header="_Help">
+                <MenuItem Header="Check for _Updates..." Click="CheckForUpdates_Click" />
                 <MenuItem Header="_About" Click="About_Click" />
             </MenuItem>
         </Menu>

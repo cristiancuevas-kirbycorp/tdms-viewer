@@ -16,6 +16,7 @@ namespace TdmsViewer;
 public partial class MainWindow : Window
 {
     private readonly MainViewModel _vm;
+    private readonly IUpdateService _update = new UpdateService();
     private Point _boxStart;
     private bool _boxDragging;
     private Point _dragStart;
@@ -51,6 +52,8 @@ public partial class MainWindow : Window
         _vm.PreviewInvalidated += (_, _) => RenderPreview();
         _vm.ColorPickRequested += OnColorPickRequested;
         DataContext = _vm;
+
+        Loaded += async (_, _) => await CheckForUpdatesAsync(silent: true);
     }
 
     private void ReportsTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
@@ -687,6 +690,56 @@ public partial class MainWindow : Window
     private void About_Click(object sender, RoutedEventArgs e) =>
         MessageBox.Show(this, $"TDMS Viewer\nVersion {AppVersion}", "About TDMS Viewer",
             MessageBoxButton.OK, MessageBoxImage.Information);
+
+    private async void CheckForUpdates_Click(object sender, RoutedEventArgs e) =>
+        await CheckForUpdatesAsync(silent: false);
+
+    private async Task CheckForUpdatesAsync(bool silent)
+    {
+        var current = GetType().Assembly.GetName().Version ?? new System.Version(1, 0, 0);
+        UpdateInfo? info;
+        try
+        {
+            info = await _update.CheckAsync(current);
+        }
+        catch (Exception ex)
+        {
+            if (!silent)
+                MessageBox.Show(this, $"Couldn't check for updates.\n{ex.Message}", "Update",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        if (info is null)
+        {
+            if (!silent)
+                MessageBox.Show(this, $"You're on the latest version ({AppVersion}).", "Update",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var choice = MessageBox.Show(this,
+            $"Version {info.Version} is available (you have {AppVersion}).\n\nDownload and install it now? The app will restart.",
+            "Update available", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (choice != MessageBoxResult.Yes) return;
+
+        try
+        {
+            _vm.IsBusy = true;
+            _vm.StatusText = "Downloading update...";
+            var progress = new Progress<double>(p => _vm.StatusText = $"Downloading update... {p:P0}");
+            var newExe = await _update.DownloadAsync(info.DownloadUrl, progress);
+            _vm.StatusText = "Installing update...";
+            _update.ApplyAndRestart(newExe);
+        }
+        catch (Exception ex)
+        {
+            _vm.IsBusy = false;
+            MessageBox.Show(this,
+                $"Update failed.\n{ex.Message}\n\nYou can download it manually from the releases page.",
+                "Update", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
 
     private void PrintSave_Click(object sender, RoutedEventArgs e)
     {
