@@ -413,9 +413,10 @@
                         <TextBlock DockPanel.Dock="Top" Text="PROPERTIES" Style="{StaticResource SectionHeader}" />
                         <DataGrid ItemsSource="{Binding Source={StaticResource PropView}}" AutoGenerateColumns="False"
                                   CanUserAddRows="False" HeadersVisibility="Column" IsReadOnly="True"
-                                  GridLinesVisibility="Horizontal">
+                                  GridLinesVisibility="Horizontal"
+                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                             <DataGrid.Columns>
-                                <DataGridTextColumn Header="Property" Binding="{Binding Name}" Width="Auto" />
+                                <DataGridTextColumn Header="Property" Binding="{Binding Name}" Width="Auto" MinWidth="80" />
                                 <DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="*" />
                             </DataGrid.Columns>
                             <DataGrid.GroupStyle>

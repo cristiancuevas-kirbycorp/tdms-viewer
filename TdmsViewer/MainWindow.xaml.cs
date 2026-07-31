@@ -145,8 +145,9 @@ public partial class MainWindow : Window
         }
 
         var signal = plot.Add.SignalXY(data.X, data.Y);
+        plot.HideLegend();
         if (_vm.SelectedChannelInfo is { } info)
-            signal.LegendText = info.Name;
+            plot.Title(info.Name);
         if (data.XIsDateTime)
             plot.Axes.DateTimeTicksBottom();
 
