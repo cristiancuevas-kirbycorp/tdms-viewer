@@ -1,0 +1,36 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+[Rr]elease/
+[Dd]ebug/
+publish/
+*.user
+
+# .NET
+project.lock.json
+project.assets.json
+*.nuget.props
+*.nuget.targets
+msbuild.log
+build.log
+
+# Visual Studio / Rider / VS Code
+.vs/
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
+*.suo
+*.userprefs
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# App artifacts
+*.defragtmp
+*.defrag.tdms
+
+# Data files (don't commit large TDMS logs)
+*.tdms
+*.tdms_index

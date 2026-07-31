@@ -1,0 +1,15 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Run TDMS Viewer",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/TdmsViewer/bin/Debug/net8.0-windows/TdmsViewer.dll",
+            "cwd": "${workspaceFolder}/TdmsViewer",
+            "console": "internalConsole",
+            "stopAtEntry": false
+        }
+    ]
+}

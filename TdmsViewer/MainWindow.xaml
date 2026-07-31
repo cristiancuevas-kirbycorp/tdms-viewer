@@ -1,0 +1,445 @@
+﻿<Window x:Class="TdmsViewer.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:TdmsViewer"
+        xmlns:vm="clr-namespace:TdmsViewer.ViewModels"
+        xmlns:sp="clr-namespace:ScottPlot.WPF;assembly=ScottPlot.WPF"
+        mc:Ignorable="d"
+        Title="TDMS Viewer" Height="800" Width="1400"
+        FontFamily="Segoe UI" FontSize="13"
+        Background="{StaticResource WindowBrush}"
+        Foreground="{StaticResource TextBrush}"
+        d:DataContext="{d:DesignInstance Type=vm:MainViewModel}">
+
+    <Window.Resources>
+        <local:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility" />
+        <local:StringToBrushConverter x:Key="StringToBrush" />
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+        <CollectionViewSource x:Key="PropView" Source="{Binding SelectedProperties}">
+            <CollectionViewSource.GroupDescriptions>
+                <PropertyGroupDescription PropertyName="Category" />
+            </CollectionViewSource.GroupDescriptions>
+        </CollectionViewSource>
+    </Window.Resources>
+
+    <DockPanel>
+        <Menu DockPanel.Dock="Top">
+            <MenuItem Header="_File">
+                <MenuItem Header="_Open TDMS..." Command="{Binding OpenTdmsCommand}" />
+                <MenuItem Header="Open _Recent" ItemsSource="{Binding RecentFiles}">
+                    <MenuItem.ItemContainerStyle>
+                        <Style TargetType="MenuItem">
+                            <Setter Property="Header" Value="{Binding DisplayName}" />
+                            <Setter Property="ToolTip" Value="{Binding Path}" />
+                            <Setter Property="Command" Value="{Binding DataContext.OpenRecentCommand, RelativeSource={RelativeSource AncestorType=Menu}}" />
+                            <Setter Property="CommandParameter" Value="{Binding}" />
+                        </Style>
+                    </MenuItem.ItemContainerStyle>
+                </MenuItem>
+                <Separator />
+                <MenuItem Header="_Load Project..." Command="{Binding LoadProjectCommand}" />
+                <MenuItem Header="_Save Project..." Command="{Binding SaveProjectCommand}" />
+                <Separator />
+                <MenuItem Header="E_xit" Click="Exit_Click" />
+            </MenuItem>
+            <MenuItem Header="_Edit">
+                <MenuItem Header="Add _Report" Command="{Binding AddReportCommand}" />
+                <MenuItem Header="Add _Page" Command="{Binding AddPageCommand}" />
+            </MenuItem>
+            <MenuItem Header="_Print/Save" Click="PrintSave_Click" />
+            <MenuItem Header="_Help">
+                <MenuItem Header="_About" Click="About_Click" />
+            </MenuItem>
+        </Menu>
+
+        <StatusBar DockPanel.Dock="Bottom">
+            <StatusBarItem>
+                <TextBlock Text="{Binding StatusText}" />
+            </StatusBarItem>
+            <StatusBarItem HorizontalAlignment="Right">
+                <ProgressBar Width="150" Height="12" IsIndeterminate="True"
+                             Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
+            </StatusBarItem>
+        </StatusBar>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="220" MinWidth="160" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="320" MinWidth="240" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Left: Reports / Pages -->
+            <DockPanel Grid.Column="0">
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="6">
+                    <Button Content="Add Report" Command="{Binding AddReportCommand}" Style="{StaticResource SubtleButton}" Margin="0,0,4,0" />
+                    <Button Content="Add Page" Command="{Binding AddPageCommand}" Style="{StaticResource SubtleButton}" />
+                </StackPanel>
+                <TextBlock DockPanel.Dock="Top" Text="REPORTS" Style="{StaticResource SectionHeader}" />
+                <TreeView x:Name="ReportsTree" SelectedItemChanged="ReportsTree_SelectedItemChanged"
+                          ItemsSource="{Binding Reports}">
+                    <TreeView.Resources>
+                        <HierarchicalDataTemplate DataType="{x:Type vm:ReportViewModel}" ItemsSource="{Binding Pages}">
+                            <TextBlock Text="{Binding Name}" />
+                        </HierarchicalDataTemplate>
+                        <DataTemplate DataType="{x:Type vm:PageViewModel}">
+                            <TextBlock Text="{Binding Name}" />
+                        </DataTemplate>
+                    </TreeView.Resources>
+                </TreeView>
+            </DockPanel>
+
+            <GridSplitter Grid.Column="1" Width="4" HorizontalAlignment="Stretch" Background="{StaticResource BorderLightBrush}" />
+
+            <!-- Center: Zoom toolbar + Plot (with box-zoom overlay) + Series editor -->
+            <DockPanel Grid.Column="2">
+                <Border DockPanel.Dock="Top" Style="{StaticResource ToolBarSurface}">
+                    <StackPanel Orientation="Horizontal">
+                        <Button Style="{StaticResource IconButton}" Content="&#xE72C;" Click="ResetZoom_Click" ToolTip="Reset zoom (fit all data)" />
+                        <Rectangle Style="{StaticResource ToolSeparator}" />
+                        <TextBlock Text="Time" VerticalAlignment="Center" Foreground="{StaticResource MutedBrush}" Margin="2,0,4,0" />
+                        <Button Style="{StaticResource IconButton}" Content="&#xE8A3;" Click="ZoomInX_Click" ToolTip="Zoom in on time (X)" />
+                        <Button Style="{StaticResource IconButton}" Content="&#xE71F;" Click="ZoomOutX_Click" ToolTip="Zoom out on time (X)" />
+                        <Rectangle Style="{StaticResource ToolSeparator}" />
+                        <TextBlock Text="Value" VerticalAlignment="Center" Foreground="{StaticResource MutedBrush}" Margin="2,0,4,0" />
+                        <Button Style="{StaticResource IconButton}" Content="&#xE8A3;" Click="ZoomInY_Click" ToolTip="Zoom in on value (Y)" />
+                        <Button Style="{StaticResource IconButton}" Content="&#xE71F;" Click="ZoomOutY_Click" ToolTip="Zoom out on value (Y)" />
+                        <Rectangle Style="{StaticResource ToolSeparator}" />
+                        <ToggleButton x:Name="BoxZoomToggle" Style="{StaticResource IconToggleButton}" Content="&#xE8B3;"
+                                      Checked="BoxZoom_Checked" Unchecked="BoxZoom_Unchecked"
+                                      ToolTip="Box zoom: drag a rectangle to zoom into it" />
+                        <ToggleButton x:Name="CursorToggle" Style="{StaticResource IconToggleButton}" FontFamily="Segoe UI"
+                                      Content="Cursors" Checked="Cursors_Checked" Unchecked="Cursors_Unchecked"
+                                      ToolTip="Show two draggable time cursors with a value readout" />
+                        <Rectangle Style="{StaticResource ToolSeparator}" />
+                        <TextBlock VerticalAlignment="Center" Foreground="{StaticResource MutedBrush}" FontSize="11"
+                                   Text="Scroll / Left-drag = time (X) · Box Zoom for a region · buttons rescale Y" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Bottom: series editor + Y-axis editor -->
+                <Grid DockPanel.Dock="Bottom" MaxHeight="210">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="430" MinWidth="300" />
+                    </Grid.ColumnDefinitions>
+                    <DockPanel Grid.Column="0">
+                        <TextBlock DockPanel.Dock="Top" Text="SERIES ON THIS GRAPH" Style="{StaticResource SectionHeader}" />
+                    <DataGrid ItemsSource="{Binding SelectedPage.Series}" AutoGenerateColumns="False"
+                              CanUserAddRows="False" HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                              SelectionMode="Single">
+                        <DataGrid.Columns>
+                            <DataGridCheckBoxColumn Header="Show" Binding="{Binding Visible, UpdateSourceTrigger=PropertyChanged}" Width="40" />
+                            <DataGridTemplateColumn Header="Color" Width="50">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Button Width="26" Height="16" Margin="2" BorderBrush="#888" BorderThickness="1"
+                                                Background="{Binding ColorHex, Converter={StaticResource StringToBrush}}"
+                                                Command="{Binding DataContext.PickColorCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                CommandParameter="{Binding}" ToolTip="Change color" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="Channel" Binding="{Binding DisplayName}" IsReadOnly="True" Width="*" />
+                            <DataGridTemplateColumn Header="Line width" Width="120">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Slider Minimum="0.5" Maximum="8" Width="70" VerticalAlignment="Center"
+                                                    Value="{Binding LineWidth, UpdateSourceTrigger=PropertyChanged}" />
+                                            <TextBlock Text="{Binding LineWidth, StringFormat=0.0}" VerticalAlignment="Center" Margin="4,0" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="Y-Scale" Width="150">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <ComboBox ItemsSource="{Binding DataContext.SelectedPage.Axes, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                  DisplayMemberPath="Name" SelectedValuePath="Id"
+                                                  SelectedValue="{Binding AxisId, UpdateSourceTrigger=PropertyChanged}"
+                                                  ToolTip="Y-scale this plot is drawn against (pick the same scale to share)" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="Line" Width="80">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <ComboBox SelectedItem="{Binding LineStyle}"
+                                                  ItemsSource="{Binding Source={x:Static vm:SeriesViewModel.LineStyleOptions}}" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="Marker" Width="80">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <ComboBox SelectedItem="{Binding Marker}"
+                                                  ItemsSource="{Binding Source={x:Static vm:SeriesViewModel.MarkerOptions}}" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="" Width="70">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Button Content="Remove" Margin="2" Padding="4,0"
+                                                Command="{Binding DataContext.DeleteSelectedSeriesCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                CommandParameter="{Binding}" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                    </DockPanel>
+
+                    <DockPanel Grid.Column="1" Margin="6,0,0,0">
+                        <DockPanel DockPanel.Dock="Top">
+                            <Button DockPanel.Dock="Right" Content="Add Scale" Command="{Binding AddAxisCommand}"
+                                    Style="{StaticResource SubtleButton}" Margin="4,2,0,2" Padding="8,2" />
+                            <TextBlock Text="SCALES" Style="{StaticResource SectionHeader}" VerticalAlignment="Center"
+                                       ToolTip="Y-scales for this graph. Rename, pick side, set Auto or fixed min/max." />
+                        </DockPanel>
+                        <DataGrid ItemsSource="{Binding SelectedPage.Axes}" AutoGenerateColumns="False"
+                                  CanUserAddRows="False" HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                                  SelectionMode="Single">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Name" Binding="{Binding Name, UpdateSourceTrigger=LostFocus}" Width="*" MinWidth="120">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="ToolTip" Value="{Binding Name}" />
+                                            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                                            <Setter Property="VerticalAlignment" Value="Center" />
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                                <DataGridTemplateColumn Header="Side" Width="70">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <ComboBox SelectedItem="{Binding Side}"
+                                                      ItemsSource="{Binding Source={x:Static vm:AxisViewModel.SideOptions}}" />
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridCheckBoxColumn Header="Auto" Binding="{Binding Auto, UpdateSourceTrigger=PropertyChanged}" Width="42" />
+                                <DataGridTextColumn Header="Min" Binding="{Binding Min, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" Width="60" />
+                                <DataGridTextColumn Header="Max" Binding="{Binding Max, StringFormat=0.####, UpdateSourceTrigger=LostFocus}" Width="60" />
+                                <DataGridTemplateColumn Header="" Width="32">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Button Style="{StaticResource IconButton}" Width="26" Content="&#xE74D;"
+                                                    ToolTip="Remove scale"
+                                                    Command="{Binding DataContext.RemoveAxisCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                    CommandParameter="{Binding}" />
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </DockPanel>
+                </Grid>
+
+                <Grid AllowDrop="True" DragOver="Plot_DragOver" Drop="Plot_Drop">
+                    <sp:WpfPlot x:Name="WpfPlot" PreviewMouseWheel="Plot_PreviewMouseWheel"
+                                MouseLeftButtonDown="Plot_MouseLeftButtonDown"
+                                MouseMove="Plot_MouseMove"
+                                MouseLeftButtonUp="Plot_MouseLeftButtonUp" />
+                    <Canvas x:Name="ZoomOverlay" Background="#01FFFFFF" IsHitTestVisible="False"
+                            MouseLeftButtonDown="ZoomOverlay_MouseLeftButtonDown"
+                            MouseMove="ZoomOverlay_MouseMove"
+                            MouseLeftButtonUp="ZoomOverlay_MouseLeftButtonUp"
+                            Cursor="Cross">
+                        <Rectangle x:Name="ZoomRect" Stroke="#3399FF" StrokeThickness="1" Fill="#333399FF"
+                                   Visibility="Collapsed" />
+                    </Canvas>
+                    <Border Background="#B0FFFFFF" Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}">
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock Text="Loading TDMS..." FontSize="16" FontWeight="Bold"
+                                       HorizontalAlignment="Center" Margin="0,0,0,8" />
+                            <ProgressBar Width="240" Height="16" IsIndeterminate="True" />
+                            <TextBlock Text="{Binding StatusText}" Foreground="#555"
+                                       HorizontalAlignment="Center" Margin="0,8,0,0" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border x:Name="CursorPanel" Visibility="Collapsed" Background="#F2FFFFFF"
+                            BorderBrush="{StaticResource BorderLightBrush}" BorderThickness="1" CornerRadius="6"
+                            HorizontalAlignment="Left" VerticalAlignment="Top" Margin="12" Padding="8,6" MaxHeight="260">
+                        <StackPanel>
+                            <TextBlock x:Name="CursorHeader" FontWeight="SemiBold" Margin="0,0,0,4" />
+                            <Grid Margin="0,0,0,2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="150" />
+                                    <ColumnDefinition Width="66" />
+                                    <ColumnDefinition Width="66" />
+                                    <ColumnDefinition Width="66" />
+                                    <ColumnDefinition Width="66" />
+                                    <ColumnDefinition Width="66" />
+                                    <ColumnDefinition Width="66" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="1" Text="Plot" FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}" Margin="4,0" />
+                                <TextBlock Grid.Column="2" Text="A" FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Right" />
+                                <TextBlock Grid.Column="3" Text="B" FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Right" />
+                                <TextBlock Grid.Column="4" Text="B-A" FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Right" />
+                                <TextBlock Grid.Column="5" Text="Min" FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Right" />
+                                <TextBlock Grid.Column="6" Text="Max" FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Right" />
+                                <TextBlock Grid.Column="7" Text="Avg" FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Right" />
+                            </Grid>
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="200">
+                                <ItemsControl x:Name="CursorItems">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,1">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="12" />
+                                                    <ColumnDefinition Width="150" />
+                                                    <ColumnDefinition Width="66" />
+                                                    <ColumnDefinition Width="66" />
+                                                    <ColumnDefinition Width="66" />
+                                                    <ColumnDefinition Width="66" />
+                                                    <ColumnDefinition Width="66" />
+                                                    <ColumnDefinition Width="66" />
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" Width="10" Height="10" CornerRadius="2"
+                                                        Background="{Binding ColorHex, Converter={StaticResource StringToBrush}}" />
+                                                <TextBlock Grid.Column="1" Text="{Binding Plot}" TextTrimming="CharacterEllipsis"
+                                                           ToolTip="{Binding Plot}" Margin="4,0" />
+                                                <TextBlock Grid.Column="2" Text="{Binding ValueA}" HorizontalAlignment="Right" />
+                                                <TextBlock Grid.Column="3" Text="{Binding ValueB}" HorizontalAlignment="Right" />
+                                                <TextBlock Grid.Column="4" Text="{Binding Delta}" HorizontalAlignment="Right" Foreground="{StaticResource MutedBrush}" />
+                                                <TextBlock Grid.Column="5" Text="{Binding Min}" HorizontalAlignment="Right" />
+                                                <TextBlock Grid.Column="6" Text="{Binding Max}" HorizontalAlignment="Right" />
+                                                <TextBlock Grid.Column="7" Text="{Binding Avg}" HorizontalAlignment="Right" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                            <TextBlock Text="Min / Max / Avg are computed between the cursors. Drag a cursor line to move it."
+                                       TextWrapping="Wrap" FontSize="10" Foreground="{StaticResource MutedBrush}" Margin="0,4,0,0" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </DockPanel>
+
+            <GridSplitter Grid.Column="3" Width="4" HorizontalAlignment="Stretch" Background="{StaticResource BorderLightBrush}" />
+
+            <!-- Right: Data Portal (channels, properties, preview) -->
+            <DockPanel Grid.Column="4">
+                <StackPanel DockPanel.Dock="Top" Margin="6">
+                    <TextBlock Text="DATA PORTAL" Style="{StaticResource SectionHeader}" Margin="0,0,0,4" />
+                    <TextBox Text="{Binding ChannelFilter, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="Search groups and channels. Multiple words all must match (e.g. 'AFE voltage')." />
+                    <DockPanel Margin="0,4,0,0">
+                        <TextBlock DockPanel.Dock="Left" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"
+                                   VerticalAlignment="Center"
+                                   Text="Tick a channel to add it (or double-click / drag)." />
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Style="{StaticResource IconButton}" Width="26" Content="&#xE710;"
+                                    Command="{Binding ExpandAllCommand}" ToolTip="Expand all groups" />
+                            <Button Style="{StaticResource IconButton}" Width="26" Content="&#xE738;"
+                                    Command="{Binding CollapseAllCommand}" ToolTip="Collapse all groups" />
+                        </StackPanel>
+                    </DockPanel>
+                </StackPanel>
+
+                <Expander DockPanel.Dock="Bottom" Header="Calculated Channels" IsExpanded="False" Margin="6">
+                    <StackPanel>
+                        <TextBlock TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" Margin="0,2"
+                                   Text="Build a new channel from a math expression. Pick a channel, click Insert to reference it, then combine with + - * / and numbers." />
+                        <TextBlock Text="New channel name" Margin="0,6,0,2" />
+                        <TextBox Text="{Binding FormulaName, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Text="Reference a channel" Margin="0,6,0,2" />
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Content="Insert" Margin="4,0,0,0"
+                                    Style="{StaticResource SubtleButton}"
+                                    Command="{Binding InsertChannelReferenceCommand}" />
+                            <ComboBox ItemsSource="{Binding AllChannelPaths}" SelectedItem="{Binding ChannelToInsert}" />
+                        </DockPanel>
+                        <TextBlock Text="Expression" Margin="0,6,0,2" />
+                        <TextBox Text="{Binding FormulaExpression, UpdateSourceTrigger=PropertyChanged}"
+                                 AcceptsReturn="True" TextWrapping="Wrap" Height="50" VerticalScrollBarVisibility="Auto" />
+                        <TextBlock Text="Example: [A1 BMS/Bus current] * 2 + 5" FontStyle="Italic" Foreground="{StaticResource MutedBrush}" Margin="0,4" />
+                        <Button Content="Create / Update Channel" Command="{Binding AddFormulaCommand}" Style="{StaticResource AccentButton}" />
+                    </StackPanel>
+                </Expander>
+
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" MinHeight="120" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="200" MinHeight="80" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="180" MinHeight="80" />
+                    </Grid.RowDefinitions>
+
+                    <TreeView x:Name="ChannelsTree" Grid.Row="0" ItemsSource="{Binding ChannelTree}"
+                              MouseDoubleClick="ChannelsTree_MouseDoubleClick"
+                              SelectedItemChanged="ChannelsTree_SelectedItemChanged"
+                              PreviewMouseLeftButtonDown="ChannelsTree_PreviewMouseLeftButtonDown"
+                              MouseMove="ChannelsTree_MouseMove">
+                        <TreeView.ItemContainerStyle>
+                            <Style TargetType="TreeViewItem">
+                                <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                            </Style>
+                        </TreeView.ItemContainerStyle>
+                        <TreeView.Resources>
+                            <HierarchicalDataTemplate DataType="{x:Type vm:ChannelTreeItemViewModel}" ItemsSource="{Binding Children}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                        <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                  Visibility="{Binding IsGroup, Converter={StaticResource InverseBoolToVisibility}}"
+                                                  VerticalAlignment="Center" Margin="0,0,4,0" />
+                                        <TextBlock VerticalAlignment="Center"
+                                                   local:TextHighlighter.Text="{Binding Name}"
+                                                   local:TextHighlighter.Query="{Binding DataContext.ChannelFilter, RelativeSource={RelativeSource AncestorType=TreeView}}" />
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="1" Text="{Binding Unit}" Foreground="#888"
+                                               VerticalAlignment="Center" Margin="8,0,4,0" />
+                                </Grid>
+                            </HierarchicalDataTemplate>
+                        </TreeView.Resources>
+                    </TreeView>
+
+                    <GridSplitter Grid.Row="1" Height="4" HorizontalAlignment="Stretch" Background="{StaticResource BorderLightBrush}" />
+
+                    <DockPanel Grid.Row="2">
+                        <TextBlock DockPanel.Dock="Top" Text="PROPERTIES" Style="{StaticResource SectionHeader}" />
+                        <DataGrid ItemsSource="{Binding Source={StaticResource PropView}}" AutoGenerateColumns="False"
+                                  CanUserAddRows="False" HeadersVisibility="Column" IsReadOnly="True"
+                                  GridLinesVisibility="Horizontal">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Property" Binding="{Binding Name}" Width="Auto" />
+                                <DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="*" />
+                            </DataGrid.Columns>
+                            <DataGrid.GroupStyle>
+                                <GroupStyle>
+                                    <GroupStyle.HeaderTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Name}" FontWeight="Bold" Background="#F0F0F0"
+                                                       Padding="4,2" Margin="0,2,0,0" />
+                                        </DataTemplate>
+                                    </GroupStyle.HeaderTemplate>
+                                </GroupStyle>
+                            </DataGrid.GroupStyle>
+                        </DataGrid>
+                    </DockPanel>
+
+                    <GridSplitter Grid.Row="3" Height="4" HorizontalAlignment="Stretch" Background="{StaticResource BorderLightBrush}" />
+
+                    <DockPanel Grid.Row="4">
+                        <TextBlock DockPanel.Dock="Top" Text="PREVIEW" Style="{StaticResource SectionHeader}" />
+                        <sp:WpfPlot x:Name="PreviewPlot" />
+                    </DockPanel>
+                </Grid>
+            </DockPanel>
+        </Grid>
+    </DockPanel>
+</Window>
