@@ -194,20 +194,26 @@ public partial class MainWindow : Window
 
             foreach (var series in members)
             {
-                ChannelData data;
-                try { data = _vm.GetSeriesData(series.Model); }
-                catch { continue; }
-                if (data.Y.Length == 0) continue;
+                try
+                {
+                    var data = _vm.GetSeriesData(series.Model);
+                    if (data.Y.Length == 0) continue;
 
-                AddSeries(plot, series, data, axis);
-                anyDateTime |= data.XIsDateTime;
-                _rendered.Add((series.DisplayName, data.X, data.Y, series.ColorHex, data.XIsDateTime));
+                    AddSeries(plot, series, data, axis);
+                    anyDateTime |= data.XIsDateTime;
+                    _rendered.Add((series.DisplayName, data.X, data.Y, series.ColorHex, data.XIsDateTime));
 
-                var (xLo, xHi, xHas) = FiniteExtent(data.X);
-                if (xHas) { xMin = Math.Min(xMin, xLo); xMax = Math.Max(xMax, xHi); }
+                    var (xLo, xHi, xHas) = FiniteExtent(data.X);
+                    if (xHas) { xMin = Math.Min(xMin, xLo); xMax = Math.Max(xMax, xHi); }
 
-                var (yLo, yHi, yFound) = FiniteExtent(data.Y);
-                if (yFound) { yMin = Math.Min(yMin, yLo); yMax = Math.Max(yMax, yHi); yHas = true; }
+                    var (yLo, yHi, yFound) = FiniteExtent(data.Y);
+                    if (yFound) { yMin = Math.Min(yMin, yLo); yMax = Math.Max(yMax, yHi); yHas = true; }
+                }
+                catch (Exception ex)
+                {
+                    // A single bad channel shouldn't take down the plot.
+                    App.Log(ex);
+                }
             }
 
             axis.Label.Text = scale.Name;
@@ -293,7 +299,7 @@ public partial class MainWindow : Window
         return (min, max);
     }
 
-    /// <summary>Adds a series: fast SignalXY for line-only, Scatter when markers are enabled.</summary>
+    /// <summary>Adds a series: fast SignalXY for line-only ascending data, Scatter otherwise (markers or unsorted X).</summary>
     private static void AddSeries(Plot plot, SeriesViewModel series, ChannelData data, IYAxis axis)
     {
         var color = ScottPlot.Color.FromHex(series.ColorHex.TrimStart('#'));
@@ -304,7 +310,8 @@ public partial class MainWindow : Window
             _ => ScottPlot.LinePattern.Solid,
         };
 
-        if (series.Marker == SeriesMarker.None)
+        // SignalXY requires strictly ascending X; fall back to Scatter when it isn't (or when markers are on).
+        if (series.Marker == SeriesMarker.None && IsAscending(data.X))
         {
             var s = plot.Add.SignalXY(data.X, data.Y);
             s.Color = color;
@@ -321,15 +328,23 @@ public partial class MainWindow : Window
             s.LineStyle.Pattern = pattern;
             s.MarkerShape = series.Marker switch
             {
+                SeriesMarker.Circle => ScottPlot.MarkerShape.FilledCircle,
                 SeriesMarker.Square => ScottPlot.MarkerShape.FilledSquare,
                 SeriesMarker.Triangle => ScottPlot.MarkerShape.FilledTriangleUp,
                 SeriesMarker.Diamond => ScottPlot.MarkerShape.FilledDiamond,
-                _ => ScottPlot.MarkerShape.FilledCircle,
+                _ => ScottPlot.MarkerShape.None,
             };
             s.MarkerSize = (float)series.Model.MarkerSize;
             s.LegendText = series.DisplayName;
             s.Axes.YAxis = axis;
         }
+    }
+
+    private static bool IsAscending(double[] x)
+    {
+        for (var i = 1; i < x.Length; i++)
+            if (x[i] < x[i - 1]) return false;
+        return true;
     }
 
     private void OnColorPickRequested(object? sender, EventArgs e)
