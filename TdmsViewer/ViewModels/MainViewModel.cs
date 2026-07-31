@@ -177,16 +177,19 @@ public sealed partial class MainViewModel : ObservableObject
 
     private async Task OpenPathAsync(string path)
     {
+        PersistConfig();
         var progress = new Progress<string>(m => StatusText = m);
         BusyTitle = "Loading TDMS...";
         IsBusy = true;
         try
         {
             var channels = await Task.Run(() => _tdms.Open(path, defragment: true, progress));
-            _project.TdmsPath = path;
             _allChannels = channels;
+            LoadSidecar(path);
+            _project.TdmsPath = path;
             BuildChannelTree(channels);
             AddRecent(path);
+            PlotInvalidated?.Invoke(this, true);
             StatusText = $"Loaded {channels.Count} channels from {Path.GetFileName(path)}.";
         }
         catch (Exception ex)
@@ -196,6 +199,53 @@ public sealed partial class MainViewModel : ObservableObject
         finally
         {
             IsBusy = false;
+        }
+    }
+
+    // --- Sidecar config (hidden file next to the TDMS holding this app's report/formula config) ---
+
+    private static string SidecarPath(string tdmsPath) => tdmsPath + ".tvcfg";
+
+    private void LoadSidecar(string tdmsPath)
+    {
+        var side = SidecarPath(tdmsPath);
+        if (!File.Exists(side)) return;
+        try
+        {
+            _project = _projects.Load(side);
+            Reports.Clear();
+            foreach (var r in _project.Reports)
+                Reports.Add(new ReportViewModel(r));
+            if (Reports.Count == 0)
+            {
+                var report = new ReportViewModel(new ReportModel());
+                report.Pages.Add(new PageViewModel(new PageModel()));
+                _project.Reports.Add(report.Model);
+                Reports.Add(report);
+            }
+            SelectedReport = Reports.FirstOrDefault();
+            SelectedPage = SelectedReport?.Pages.FirstOrDefault();
+        }
+        catch (Exception ex)
+        {
+            App.Log(ex);
+        }
+    }
+
+    /// <summary>Writes the current config to the hidden sidecar file beside the open TDMS.</summary>
+    public void PersistConfig()
+    {
+        if (string.IsNullOrEmpty(_project.TdmsPath)) return;
+        try
+        {
+            var side = SidecarPath(_project.TdmsPath);
+            if (File.Exists(side)) File.SetAttributes(side, FileAttributes.Normal);
+            _projects.Save(_project, side);
+            File.SetAttributes(side, FileAttributes.Hidden);
+        }
+        catch (Exception ex)
+        {
+            App.Log(ex);
         }
     }
 

@@ -56,6 +56,12 @@ public partial class MainWindow : Window
         Loaded += async (_, _) => await CheckForUpdatesAsync(silent: true);
     }
 
+    protected override void OnClosed(EventArgs e)
+    {
+        _vm.PersistConfig();
+        base.OnClosed(e);
+    }
+
     private void ReportsTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
         switch (e.NewValue)
