@@ -40,6 +40,28 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private bool _showReportSettings;
 
+    // --- Center pane content selection (welcome / report settings / graph page) ---
+
+    [ObservableProperty]
+    private bool _welcomeVisible = true;
+
+    [ObservableProperty]
+    private bool _reportSettingsVisible;
+
+    [ObservableProperty]
+    private bool _graphPageVisible;
+
+    partial void OnIsFileLoadedChanged(bool value) => UpdateCenterView();
+    partial void OnShowReportSettingsChanged(bool value) => UpdateCenterView();
+
+    // No file -> Welcome; report node -> settings; page node -> graph.
+    private void UpdateCenterView()
+    {
+        WelcomeVisible = !IsFileLoaded;
+        ReportSettingsVisible = IsFileLoaded && ShowReportSettings;
+        GraphPageVisible = IsFileLoaded && !ShowReportSettings;
+    }
+
     [ObservableProperty]
     private ReportViewModel? _selectedReport;
 
