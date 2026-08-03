@@ -603,7 +603,7 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    // Copies the plot area (plot + legend + cursor overlays) exactly as shown, over a white background.
+    // Copies the plot exactly as shown (both axes + legend + cursor overlays) to the clipboard.
     private void CopyPlotImage()
     {
         try
@@ -615,15 +615,25 @@ public partial class MainWindow : Window
             var h = (int)Math.Round(ph * dpi.DpiScaleY);
             if (w <= 0 || h <= 0) return;
 
-            var host = new RenderTargetBitmap(w, h, dpi.PixelsPerInchX, dpi.PixelsPerInchY, PixelFormats.Pbgra32);
-            host.Render(PlotHost);
+            // Base is ScottPlot's own render so every axis (including the X time axis) is intact.
+            var plotBytes = WpfPlot.Plot.GetImage(w, h).GetImageBytes();
+            var plotImg = new BitmapImage();
+            using (var ms = new System.IO.MemoryStream(plotBytes))
+            {
+                plotImg.BeginInit();
+                plotImg.CacheOption = BitmapCacheOption.OnLoad;
+                plotImg.StreamSource = ms;
+                plotImg.EndInit();
+            }
+            plotImg.Freeze();
 
-            // Flatten onto white so any transparent pixels don't paste as black.
             var visual = new DrawingVisual();
             using (var dc = visual.RenderOpen())
             {
                 dc.DrawRectangle(Brushes.White, null, new Rect(0, 0, pw, ph));
-                dc.DrawImage(host, new Rect(0, 0, pw, ph));
+                dc.DrawImage(plotImg, new Rect(0, 0, pw, ph));
+                DrawOverlay(dc, GraphLegend);
+                DrawOverlay(dc, CursorPanel);
             }
 
             var final = new RenderTargetBitmap(w, h, dpi.PixelsPerInchX, dpi.PixelsPerInchY, PixelFormats.Pbgra32);
@@ -637,6 +647,24 @@ public partial class MainWindow : Window
             MessageBox.Show(this, $"Could not copy the image.\n{ex.Message}", "Copy image",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
+    }
+
+    // Renders a visible overlay panel and draws it at its on-screen position over the plot image.
+    private void DrawOverlay(DrawingContext dc, FrameworkElement overlay)
+    {
+        if (overlay.Visibility != Visibility.Visible) return;
+        var ow = overlay.ActualWidth;
+        var oh = overlay.ActualHeight;
+        if (ow <= 0 || oh <= 0) return;
+
+        var dpi = VisualTreeHelper.GetDpi(overlay);
+        var bmp = new RenderTargetBitmap(
+            (int)Math.Round(ow * dpi.DpiScaleX), (int)Math.Round(oh * dpi.DpiScaleY),
+            dpi.PixelsPerInchX, dpi.PixelsPerInchY, PixelFormats.Pbgra32);
+        bmp.Render(overlay);
+
+        var pos = overlay.TranslatePoint(new Point(0, 0), PlotHost);
+        dc.DrawImage(bmp, new Rect(pos.X, pos.Y, ow, oh));
     }
 
     // Scroll wheel zooms only the shared time (X) axis, centered on the cursor.
