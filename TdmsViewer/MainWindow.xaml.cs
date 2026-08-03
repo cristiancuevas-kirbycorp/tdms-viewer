@@ -2,6 +2,7 @@
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using Microsoft.Win32;
 using ScottPlot;
 using TdmsViewer.Models;
@@ -595,8 +596,36 @@ public partial class MainWindow : Window
             menu.Items.Add(Item("Reset zoom (fit all)", () => RenderPlot(fitX: true)));
         }
 
+        menu.Items.Add(new Separator());
+        menu.Items.Add(Item("Copy image to clipboard", CopyPlotImage));
+
         menu.IsOpen = true;
         e.Handled = true;
+    }
+
+    // Renders the current plot to a bitmap and puts it on the clipboard.
+    private void CopyPlotImage()
+    {
+        try
+        {
+            var w = Math.Max(200, (int)WpfPlot.ActualWidth);
+            var h = Math.Max(150, (int)WpfPlot.ActualHeight);
+            var png = WpfPlot.Plot.GetImage(w, h).GetImageBytes();
+            using var ms = new System.IO.MemoryStream(png);
+            var bmp = new BitmapImage();
+            bmp.BeginInit();
+            bmp.CacheOption = BitmapCacheOption.OnLoad;
+            bmp.StreamSource = ms;
+            bmp.EndInit();
+            bmp.Freeze();
+            Clipboard.SetImage(bmp);
+        }
+        catch (Exception ex)
+        {
+            App.Log(ex);
+            MessageBox.Show(this, $"Could not copy the image.\n{ex.Message}", "Copy image",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     // Scroll wheel zooms only the shared time (X) axis, centered on the cursor.
