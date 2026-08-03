@@ -603,22 +603,20 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    // Renders the current plot to a bitmap and puts it on the clipboard.
+    // Copies the plot area (including the legend and cursor overlays) to the clipboard.
     private void CopyPlotImage()
     {
         try
         {
-            var w = Math.Max(200, (int)WpfPlot.ActualWidth);
-            var h = Math.Max(150, (int)WpfPlot.ActualHeight);
-            var png = WpfPlot.Plot.GetImage(w, h).GetImageBytes();
-            using var ms = new System.IO.MemoryStream(png);
-            var bmp = new BitmapImage();
-            bmp.BeginInit();
-            bmp.CacheOption = BitmapCacheOption.OnLoad;
-            bmp.StreamSource = ms;
-            bmp.EndInit();
-            bmp.Freeze();
-            Clipboard.SetImage(bmp);
+            var dpi = VisualTreeHelper.GetDpi(PlotHost);
+            var w = (int)Math.Round(PlotHost.ActualWidth * dpi.DpiScaleX);
+            var h = (int)Math.Round(PlotHost.ActualHeight * dpi.DpiScaleY);
+            if (w <= 0 || h <= 0) return;
+
+            var rtb = new RenderTargetBitmap(w, h, dpi.PixelsPerInchX, dpi.PixelsPerInchY, PixelFormats.Pbgra32);
+            rtb.Render(PlotHost);
+            rtb.Freeze();
+            Clipboard.SetImage(rtb);
         }
         catch (Exception ex)
         {
