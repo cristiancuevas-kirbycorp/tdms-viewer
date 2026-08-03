@@ -983,10 +983,157 @@ public partial class MainWindow : Window
         }
     }
 
-    private void PrintSave_Click(object sender, RoutedEventArgs e)
+    private void PrintPdf_Executed(object sender, ExecutedRoutedEventArgs e)
     {
-        var dialog = new SaveFileDialog { Filter = "PNG image (*.png)|*.png", DefaultExt = ".png" };
+        if (!_vm.IsFileLoaded)
+        {
+            MessageBox.Show(this, "Open a TDMS file and add a graph before printing.",
+                "Print to PDF", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        // Print the selected tree item: a report -> all its pages; a page -> just that page.
+        ReportViewModel? report;
+        List<PageViewModel> pages;
+        switch (ReportsTree.SelectedItem)
+        {
+            case ReportViewModel r:
+                report = r;
+                pages = r.Pages.ToList();
+                break;
+            case PageViewModel p:
+                report = _vm.Reports.FirstOrDefault(rr => rr.Pages.Contains(p));
+                pages = new List<PageViewModel> { p };
+                break;
+            default:
+                report = _vm.SelectedReport;
+                pages = report?.Pages.ToList() ?? new List<PageViewModel>();
+                break;
+        }
+
+        if (report is null || pages.Count == 0)
+        {
+            MessageBox.Show(this, "Select a report or a graph page in the Reports list to print.",
+                "Print to PDF", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var dialog = new SaveFileDialog
+        {
+            Filter = "PDF document (*.pdf)|*.pdf",
+            DefaultExt = ".pdf",
+            FileName = MakeSafeFileName(report.Title) + ".pdf",
+        };
         if (dialog.ShowDialog() != true) return;
-        WpfPlot.Plot.SavePng(dialog.FileName, (int)WpfPlot.ActualWidth, (int)WpfPlot.ActualHeight);
+
+        try
+        {
+            var tdmsName = _vm.ActiveWorkspace is { } ws ? System.IO.Path.GetFileName(ws.Path) : string.Empty;
+            new ReportPdfService().Build(report, pages, tdmsName, dialog.FileName, RenderPageImage);
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dialog.FileName) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            App.Log(ex);
+            MessageBox.Show(this, $"Could not create the PDF.\n{ex.Message}",
+                "Print to PDF", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private static string MakeSafeFileName(string name)
+    {
+        var safe = string.Join("_", (name ?? "Report").Split(System.IO.Path.GetInvalidFileNameChars()));
+        return string.IsNullOrWhiteSpace(safe) ? "Report" : safe;
+    }
+
+    // Renders a page's plot (no cursors/interaction) to a PNG for printing.
+    private byte[]? RenderPageImage(PageViewModel page, int width, int height)
+    {
+        try
+        {
+            var plot = new Plot();
+            plot.Axes.Remove(ScottPlot.Edge.Left);
+            plot.Axes.Remove(ScottPlot.Edge.Right);
+
+            var anyDateTime = false;
+            var xMin = double.PositiveInfinity;
+            var xMax = double.NegativeInfinity;
+            var axisExtents = new List<(IYAxis Axis, double Min, double Max, bool Has, AxisViewModel Scale)>();
+
+            foreach (var scale in page.Axes)
+            {
+                var members = page.Series.Where(s => s.Visible && s.AxisId == scale.Id).ToList();
+                if (members.Count == 0) continue;
+
+                var axis = scale.Side == AxisSide.Left
+                    ? (IYAxis)plot.Axes.AddLeftAxis()
+                    : plot.Axes.AddRightAxis();
+
+                var yMin = double.PositiveInfinity;
+                var yMax = double.NegativeInfinity;
+                var yHas = false;
+                foreach (var series in members)
+                {
+                    try
+                    {
+                        var data = _vm.GetSeriesData(series.Model);
+                        if (data.Y.Length == 0) continue;
+                        AddSeries(plot, series, data, axis);
+                        anyDateTime |= data.XIsDateTime;
+                        var (xLo, xHi, xHas) = FiniteExtent(data.X);
+                        if (xHas) { xMin = Math.Min(xMin, xLo); xMax = Math.Max(xMax, xHi); }
+                        var (yLo, yHi, yFound) = FiniteExtent(data.Y);
+                        if (yFound) { yMin = Math.Min(yMin, yLo); yMax = Math.Max(yMax, yHi); yHas = true; }
+                    }
+                    catch (Exception ex) { App.Log(ex); }
+                }
+
+                axis.Label.Text = scale.Name;
+                if (members.Count == 1)
+                {
+                    var c = ScottPlot.Color.FromHex(members[0].ColorHex.TrimStart('#'));
+                    axis.Label.ForeColor = c;
+                    axis.TickLabelStyle.ForeColor = c;
+                }
+                axisExtents.Add((axis, yMin, yMax, yHas, scale));
+            }
+
+            if (!axisExtents.Any(a => a.Scale.Side == AxisSide.Left))
+            {
+                var placeholder = plot.Axes.AddLeftAxis();
+                placeholder.IsVisible = axisExtents.Count == 0;
+            }
+            if (anyDateTime) plot.Axes.DateTimeTicksBottom();
+
+            if (double.IsFinite(xMin) && double.IsFinite(xMax) && xMax >= xMin)
+            {
+                double xa, xb;
+                if (page.Model.XMin is double smin && page.Model.XMax is double smax
+                    && double.IsFinite(smin) && double.IsFinite(smax) && smax > smin)
+                    (xa, xb) = (smin, smax);
+                else
+                    (xa, xb) = PadX(xMin, xMax);
+
+                foreach (var (axis, min, max, has, scale) in axisExtents)
+                {
+                    double ya, yb;
+                    if (scale is { Auto: false } && scale.Max > scale.Min) { ya = scale.Min; yb = scale.Max; }
+                    else if (has) { (ya, yb) = PadY(min, max); }
+                    else continue;
+                    plot.Axes.SetLimits(new AxisLimits(xa, xb, ya, yb), plot.Axes.Bottom, axis);
+                }
+            }
+
+            var tmp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"tvplot_{Guid.NewGuid():N}.png");
+            plot.SavePng(tmp, width, height);
+            var bytes = System.IO.File.ReadAllBytes(tmp);
+            System.IO.File.Delete(tmp);
+            return bytes;
+        }
+        catch (Exception ex)
+        {
+            App.Log(ex);
+            return null;
+        }
     }
 }

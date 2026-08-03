@@ -7,9 +7,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
-    <Version>1.7.0</Version>
-    <FileVersion>1.7.0.0</FileVersion>
-    <AssemblyVersion>1.7.0.0</AssemblyVersion>
+    <Version>1.8.0</Version>
+    <FileVersion>1.8.0.0</FileVersion>
+    <AssemblyVersion>1.8.0.0</AssemblyVersion>
     <Product>TDMS Viewer</Product>
     <ApplicationIcon>app.ico</ApplicationIcon>
   </PropertyGroup>
@@ -32,6 +32,7 @@
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="Jace" Version="1.0.0" />
+    <PackageReference Include="PdfSharp" Version="6.1.1" />
     <PackageReference Include="ScottPlot.WPF" Version="5.1.59" />
     <PackageReference Include="TDMSReader" Version="3.1.0" />
   </ItemGroup>
