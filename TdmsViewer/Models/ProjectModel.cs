@@ -60,9 +60,11 @@ public sealed class PageModel
     public double? CursorA { get; set; }
     public double? CursorB { get; set; }
 
-    /// <summary>Corners for the graph legend and the cursor readout overlay.</summary>
-    public PlotCorner LegendCorner { get; set; } = PlotCorner.BottomRight;
-    public PlotCorner CursorCorner { get; set; } = PlotCorner.TopLeft;
+    /// <summary>Free positions (0..1 fraction of the plot area, top-left) for the legend and cursor overlays. Null = default corner.</summary>
+    public double? LegendX { get; set; }
+    public double? LegendY { get; set; }
+    public double? CursorX { get; set; }
+    public double? CursorY { get; set; }
 }
 
 /// <summary>A corner of the plot area used to place the legend / cursor overlays.</summary>

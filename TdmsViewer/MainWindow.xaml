@@ -426,7 +426,7 @@
                     <Border x:Name="GraphLegend" Visibility="Collapsed" Background="#F2FFFFFF"
                             BorderBrush="{StaticResource BorderLightBrush}" BorderThickness="1" CornerRadius="6"
                             HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="10" Padding="8,6" MaxHeight="320"
-                            Cursor="SizeAll" MouseLeftButtonDown="Overlay_MouseDown"
+                            Cursor="SizeAll" PreviewMouseLeftButtonDown="Overlay_MouseDown"
                             MouseMove="Overlay_MouseMove" MouseLeftButtonUp="Overlay_MouseUp">
                         <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="300">
                             <ItemsControl x:Name="LegendItems">
@@ -446,7 +446,7 @@
                     <Border x:Name="CursorPanel" Visibility="Collapsed" Background="#F2FFFFFF"
                             BorderBrush="{StaticResource BorderLightBrush}" BorderThickness="1" CornerRadius="6"
                             HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10" Padding="8,6" MaxHeight="260"
-                            Cursor="SizeAll" MouseLeftButtonDown="Overlay_MouseDown"
+                            Cursor="SizeAll" PreviewMouseLeftButtonDown="Overlay_MouseDown"
                             MouseMove="Overlay_MouseMove" MouseLeftButtonUp="Overlay_MouseUp">
                         <StackPanel>
                             <TextBlock x:Name="CursorHeader" FontWeight="SemiBold" Margin="0,0,0,4" />

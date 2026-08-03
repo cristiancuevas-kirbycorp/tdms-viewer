@@ -57,6 +57,8 @@ public partial class MainWindow : Window
         _vm.ColorPickRequested += OnColorPickRequested;
         DataContext = _vm;
 
+        PlotHost.SizeChanged += (_, _) => RepositionOverlays();
+
         Loaded += async (_, _) =>
         {
             await _vm.RestoreActiveWorkspaceAsync();
@@ -373,8 +375,8 @@ public partial class MainWindow : Window
         GraphLegend.Visibility = items.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
 
         if (_vm.SelectedPage is not { } page) return;
-        PositionOverlay(GraphLegend, page.Model.LegendCorner);
-        PositionOverlay(CursorPanel, page.Model.CursorCorner);
+        PositionOverlay(GraphLegend, page.Model.LegendX, page.Model.LegendY, defaultRight: true, defaultBottom: true);
+        PositionOverlay(CursorPanel, page.Model.CursorX, page.Model.CursorY, defaultRight: false, defaultBottom: false);
         RestoreCursorsForPage(page);
     }
 
@@ -741,7 +743,7 @@ public partial class MainWindow : Window
             page.Model.CursorsOn = true;
             page.Model.CursorA = _cursorX[0];
             page.Model.CursorB = _cursorX[1];
-            PositionOverlay(CursorPanel, page.Model.CursorCorner);
+            PositionOverlay(CursorPanel, page.Model.CursorX, page.Model.CursorY, defaultRight: false, defaultBottom: false);
             _vm.ScheduleAutoSave();
         }
         CursorPanel.Visibility = Visibility.Visible;
@@ -805,9 +807,11 @@ public partial class MainWindow : Window
     {
         if (_dragOverlay is null || e.LeftButton != MouseButtonState.Pressed) return;
         var p = e.GetPosition(PlotHost);
+        var maxX = Math.Max(0, PlotHost.ActualWidth - _dragOverlay.ActualWidth);
+        var maxY = Math.Max(0, PlotHost.ActualHeight - _dragOverlay.ActualHeight);
         _dragOverlay.HorizontalAlignment = System.Windows.HorizontalAlignment.Left;
         _dragOverlay.VerticalAlignment = System.Windows.VerticalAlignment.Top;
-        _dragOverlay.Margin = new Thickness(Math.Max(0, p.X - _dragOffset.X), Math.Max(0, p.Y - _dragOffset.Y), 0, 0);
+        _dragOverlay.Margin = new Thickness(Math.Clamp(p.X - _dragOffset.X, 0, maxX), Math.Clamp(p.Y - _dragOffset.Y, 0, maxY), 0, 0);
         e.Handled = true;
     }
 
@@ -818,66 +822,56 @@ public partial class MainWindow : Window
         _dragOverlay = null;
         el.ReleaseMouseCapture();
 
-        var tl = el.TranslatePoint(new Point(0, 0), PlotHost);
-        var right = tl.X + el.ActualWidth / 2 > PlotHost.ActualWidth / 2;
-        var bottom = tl.Y + el.ActualHeight / 2 > PlotHost.ActualHeight / 2;
-        var corner = (right, bottom) switch
+        if (_vm.SelectedPage is { } page && PlotHost.ActualWidth > 0 && PlotHost.ActualHeight > 0)
         {
-            (false, false) => PlotCorner.TopLeft,
-            (true, false) => PlotCorner.TopRight,
-            (false, true) => PlotCorner.BottomLeft,
-            _ => PlotCorner.BottomRight,
-        };
-        ApplyOverlayCorner(el, corner);
+            var tl = el.TranslatePoint(new Point(0, 0), PlotHost);
+            var fx = Math.Clamp(tl.X / PlotHost.ActualWidth, 0, 1);
+            var fy = Math.Clamp(tl.Y / PlotHost.ActualHeight, 0, 1);
+            if (ReferenceEquals(el, GraphLegend)) { page.Model.LegendX = fx; page.Model.LegendY = fy; }
+            else { page.Model.CursorX = fx; page.Model.CursorY = fy; }
+            _vm.ScheduleAutoSave();
+        }
         e.Handled = true;
     }
 
-    private void PositionOverlay(FrameworkElement el, PlotCorner corner)
+    // Places an overlay at its saved fraction, or at a default corner when unset.
+    private void PositionOverlay(FrameworkElement el, double? fx, double? fy, bool defaultRight, bool defaultBottom)
     {
-        el.HorizontalAlignment = corner is PlotCorner.TopLeft or PlotCorner.BottomLeft
-            ? System.Windows.HorizontalAlignment.Left : System.Windows.HorizontalAlignment.Right;
-        el.VerticalAlignment = corner is PlotCorner.TopLeft or PlotCorner.TopRight
-            ? System.Windows.VerticalAlignment.Top : System.Windows.VerticalAlignment.Bottom;
-        el.Margin = new Thickness(10);
-    }
-
-    // Assigns a corner to one overlay and pushes the other away so the two never overlap.
-    private void ApplyOverlayCorner(FrameworkElement el, PlotCorner corner)
-    {
-        if (_vm.SelectedPage is not { } page)
+        if (fx is double x && fy is double y && PlotHost.ActualWidth > 0 && PlotHost.ActualHeight > 0)
         {
-            PositionOverlay(el, corner);
-            return;
+            el.HorizontalAlignment = System.Windows.HorizontalAlignment.Left;
+            el.VerticalAlignment = System.Windows.VerticalAlignment.Top;
+            el.Margin = new Thickness(x * PlotHost.ActualWidth, y * PlotHost.ActualHeight, 0, 0);
         }
-
-        var isLegend = ReferenceEquals(el, GraphLegend);
-        var otherCorner = isLegend ? page.Model.CursorCorner : page.Model.LegendCorner;
-        if (otherCorner == corner)
+        else
         {
-            var moved = FirstFreeCorner(corner);
-            if (isLegend) page.Model.CursorCorner = moved; else page.Model.LegendCorner = moved;
+            el.HorizontalAlignment = defaultRight ? System.Windows.HorizontalAlignment.Right : System.Windows.HorizontalAlignment.Left;
+            el.VerticalAlignment = defaultBottom ? System.Windows.VerticalAlignment.Bottom : System.Windows.VerticalAlignment.Top;
+            el.Margin = new Thickness(10);
         }
-        if (isLegend) page.Model.LegendCorner = corner; else page.Model.CursorCorner = corner;
-
-        PositionOverlay(GraphLegend, page.Model.LegendCorner);
-        PositionOverlay(CursorPanel, page.Model.CursorCorner);
-        _vm.ScheduleAutoSave();
     }
 
-    private static PlotCorner FirstFreeCorner(PlotCorner taken)
+    // Keeps overlays anchored to their saved fractions when the plot area resizes.
+    private void RepositionOverlays()
     {
-        foreach (var c in new[] { PlotCorner.TopLeft, PlotCorner.TopRight, PlotCorner.BottomLeft, PlotCorner.BottomRight })
-            if (c != taken) return c;
-        return PlotCorner.TopLeft;
+        if (_vm.SelectedPage is not { } page) return;
+        PositionOverlay(GraphLegend, page.Model.LegendX, page.Model.LegendY, defaultRight: true, defaultBottom: true);
+        PositionOverlay(CursorPanel, page.Model.CursorX, page.Model.CursorY, defaultRight: false, defaultBottom: false);
     }
 
-    private static ScottPlot.Alignment MapCorner(PlotCorner c) => c switch
+    // Nearest corner to where the legend sits (the printed legend can only use corners).
+    private static ScottPlot.Alignment PrintLegendAlignment(PageViewModel page)
     {
-        PlotCorner.TopLeft => ScottPlot.Alignment.UpperLeft,
-        PlotCorner.TopRight => ScottPlot.Alignment.UpperRight,
-        PlotCorner.BottomLeft => ScottPlot.Alignment.LowerLeft,
-        _ => ScottPlot.Alignment.LowerRight,
-    };
+        var right = (page.Model.LegendX ?? 1.0) > 0.4;
+        var bottom = (page.Model.LegendY ?? 1.0) > 0.4;
+        return (right, bottom) switch
+        {
+            (false, false) => ScottPlot.Alignment.UpperLeft,
+            (true, false) => ScottPlot.Alignment.UpperRight,
+            (false, true) => ScottPlot.Alignment.LowerLeft,
+            _ => ScottPlot.Alignment.LowerRight,
+        };
+    }
 
     private sealed record LegendItem(string Name, string ColorHex);
 
@@ -1287,7 +1281,7 @@ public partial class MainWindow : Window
             if (page.Series.Any(s => s.Visible))
             {
                 plot.ShowLegend();
-                plot.Legend.Alignment = MapCorner(page.Model.LegendCorner);
+                plot.Legend.Alignment = PrintLegendAlignment(page);
                 plot.Legend.FontSize = 16;
             }
 
