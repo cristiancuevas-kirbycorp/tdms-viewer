@@ -39,6 +39,10 @@ public partial class MainWindow : Window
     private bool _restoringCursors;
     private CursorCalcSettings _calcs = CursorCalcSettings.Load();
 
+    // Axis tick-label sizes (print is higher-resolution so it needs a larger value).
+    private const float AxisTickFontSize = 15f;
+    private const float PrintTickFontSize = 22f;
+
     public string AppVersion { get; }
 
     public MainWindow()
@@ -364,6 +368,8 @@ public partial class MainWindow : Window
         _hasPlotContent = axisExtents.Any(a => a.Has);
         _renderedDateTime = _rendered.Any(r => r.Dt);
         _renderedScales = axisExtents.Select(a => a.Scale).ToList();
+        foreach (var (axis, _, _, _, _) in axisExtents) axis.TickLabelStyle.FontSize = AxisTickFontSize;
+        plot.Axes.Bottom.TickLabelStyle.FontSize = AxisTickFontSize;
         UpdatePlotOverlays();
         WpfPlot.Refresh();
     }
@@ -1479,6 +1485,9 @@ public partial class MainWindow : Window
                     vl.LabelStyle.FontSize = 14;
                 }
             }
+
+            foreach (var (axis, _, _, _, _) in axisExtents) axis.TickLabelStyle.FontSize = PrintTickFontSize;
+            plot.Axes.Bottom.TickLabelStyle.FontSize = PrintTickFontSize;
 
             var tmp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"tvplot_{Guid.NewGuid():N}.png");
             plot.SavePng(tmp, width, height);
