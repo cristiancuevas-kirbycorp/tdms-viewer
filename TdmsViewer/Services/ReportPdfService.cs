@@ -57,10 +57,10 @@ public sealed class ReportPdfService
         ReportViewModel report, PageViewModel page, int index, int count, string tdmsFileName,
         Func<PageViewModel, int, int, byte[]?> renderPlot)
     {
-        var margin = (int)(PageW * 0.045);
-        var headerH = (int)(PageH * 0.06);
-        var footerH = (int)(PageH * 0.05);
-        var gap = (int)(PageH * 0.015);
+        var margin = (int)(PageW * 0.01);
+        var headerH = (int)(PageH * 0.035);
+        var footerH = (int)(PageH * 0.03);
+        var gap = (int)(PageH * 0.01);
 
         var plotX = margin;
         var plotY = margin + headerH + gap;
@@ -76,11 +76,11 @@ public sealed class ReportPdfService
         g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
         g.Clear(Color.White);
 
-        using var font = new Font("Segoe UI", PageH * 0.013f);
+        using var font = new Font("Segoe UI", PageH * 0.007f);
         using var divider = new Pen(Color.FromArgb(215, 215, 215));
 
         var headerRect = new RectangleF(margin, margin, PageW - 2 * margin, headerH);
-        DrawBand(g, report, headerRect, report.HeaderLeft, report.HeaderMiddle, report.HeaderRight, font, index, count, tdmsFileName);
+        DrawBand(g, report, headerRect, report.HeaderLeft, report.HeaderMiddle, report.HeaderRight, font, index, count, tdmsFileName, page.Name);
         g.DrawLine(divider, margin, margin + headerH, PageW - margin, margin + headerH);
 
         if (plotPng is not null)
@@ -92,7 +92,7 @@ public sealed class ReportPdfService
 
         g.DrawLine(divider, margin, PageH - margin - footerH, PageW - margin, PageH - margin - footerH);
         var footerRect = new RectangleF(margin, PageH - margin - footerH, PageW - 2 * margin, footerH);
-        DrawBand(g, report, footerRect, report.FooterLeft, report.FooterMiddle, report.FooterRight, font, index, count, tdmsFileName);
+        DrawBand(g, report, footerRect, report.FooterLeft, report.FooterMiddle, report.FooterRight, font, index, count, tdmsFileName, page.Name);
 
         using var outMs = new MemoryStream();
         bmp.Save(outMs, ImageFormat.Png);
@@ -101,16 +101,16 @@ public sealed class ReportPdfService
 
     private static void DrawBand(
         Graphics g, ReportViewModel report, RectangleF rect,
-        ReportSlot left, ReportSlot mid, ReportSlot right, Font font, int index, int count, string tdmsFileName)
+        ReportSlot left, ReportSlot mid, ReportSlot right, Font font, int index, int count, string tdmsFileName, string pageName)
     {
-        DrawSlot(g, report, rect, left, StringAlignment.Near, font, index, count, tdmsFileName);
-        DrawSlot(g, report, rect, mid, StringAlignment.Center, font, index, count, tdmsFileName);
-        DrawSlot(g, report, rect, right, StringAlignment.Far, font, index, count, tdmsFileName);
+        DrawSlot(g, report, rect, left, StringAlignment.Near, font, index, count, tdmsFileName, pageName);
+        DrawSlot(g, report, rect, mid, StringAlignment.Center, font, index, count, tdmsFileName, pageName);
+        DrawSlot(g, report, rect, right, StringAlignment.Far, font, index, count, tdmsFileName, pageName);
     }
 
     private static void DrawSlot(
         Graphics g, ReportViewModel report, RectangleF rect, ReportSlot slot, StringAlignment align,
-        Font font, int index, int count, string tdmsFileName)
+        Font font, int index, int count, string tdmsFileName, string pageName)
     {
         if (slot == ReportSlot.None) return;
 
@@ -137,6 +137,7 @@ public sealed class ReportPdfService
         var text = slot switch
         {
             ReportSlot.ReportName => report.Title,
+            ReportSlot.PageName => pageName,
             ReportSlot.Date => DateTime.Now.ToShortDateString(),
             ReportSlot.DateTime => DateTime.Now.ToString("g"),
             ReportSlot.PageNumber => $"Page {index + 1} of {count}",

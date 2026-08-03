@@ -95,6 +95,7 @@ public enum ReportSlot
 {
     None,
     ReportName,
+    PageName,
     Date,
     DateTime,
     PageNumber,

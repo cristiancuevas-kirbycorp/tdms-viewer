@@ -319,6 +319,7 @@ public sealed partial class ReportViewModel : ObservableObject
     {
         new ReportSlotOption(ReportSlot.None, "(none)"),
         new ReportSlotOption(ReportSlot.ReportName, "Report Name"),
+        new ReportSlotOption(ReportSlot.PageName, "Page Name"),
         new ReportSlotOption(ReportSlot.Date, "Date"),
         new ReportSlotOption(ReportSlot.DateTime, "Date & Time"),
         new ReportSlotOption(ReportSlot.PageNumber, "Page X of Y"),
