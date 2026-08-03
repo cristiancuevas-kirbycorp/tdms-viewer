@@ -37,6 +37,7 @@ public partial class MainWindow : Window
     private FrameworkElement? _dragOverlay;
     private Point _dragOffset;
     private bool _restoringCursors;
+    private CursorCalcSettings _calcs = CursorCalcSettings.Load();
 
     public string AppVersion { get; }
 
@@ -917,6 +918,7 @@ public partial class MainWindow : Window
     {
         var lo = Math.Min(_cursorX[0], _cursorX[1]);
         var hi = Math.Max(_cursorX[0], _cursorX[1]);
+        var dx = _cursorX[1] - _cursorX[0];
 
         var rows = new List<CursorRow>();
         foreach (var (name, xs, ys, colorHex, _) in _rendered)
@@ -925,22 +927,113 @@ public partial class MainWindow : Window
             var (ib, okB) = NearestIndex(xs, _cursorX[1]);
             var va = okA ? ys[ia] : double.NaN;
             var vb = okB ? ys[ib] : double.NaN;
+            var bothAB = double.IsFinite(va) && double.IsFinite(vb);
 
-            var (mn, mx, avg, n) = RangeStats(xs, ys, lo, hi);
+            var (mn, mx, mean, rms, std, integral, n) = RangeStats(xs, ys, lo, hi);
+            var slope = bothAB && dx != 0 ? (vb - va) / dx : double.NaN;
+
             rows.Add(new CursorRow
             {
                 Plot = name,
                 ColorHex = colorHex,
                 ValueA = Fmt(va),
                 ValueB = Fmt(vb),
-                Delta = double.IsFinite(va) && double.IsFinite(vb) ? Fmt(vb - va) : "—",
-                Min = n > 0 ? Fmt(mn) : "—",
-                Max = n > 0 ? Fmt(mx) : "—",
-                Avg = n > 0 ? Fmt(avg) : "—",
+                Delta = bothAB ? Fmt(vb - va) : "\u2014",
+                Min = n > 0 ? Fmt(mn) : "\u2014",
+                Max = n > 0 ? Fmt(mx) : "\u2014",
+                PeakToPeak = n > 0 ? Fmt(mx - mn) : "\u2014",
+                Mean = n > 0 ? Fmt(mean) : "\u2014",
+                Rms = n > 0 ? Fmt(rms) : "\u2014",
+                StdDev = n > 0 ? Fmt(std) : "\u2014",
+                Integral = n > 0 ? Fmt(integral) : "\u2014",
+                Slope = double.IsFinite(slope) ? Fmt(slope) : "\u2014",
             });
         }
-        CursorItems.ItemsSource = rows;
+        BuildCursorReadout(rows);
         CursorHeader.Text = BuildCursorHeader();
+    }
+
+    // Builds the readout (header + rows) in code so only the enabled calculation columns appear.
+    private void BuildCursorReadout(List<CursorRow> rows)
+    {
+        CursorReadout.Children.Clear();
+        var cols = CursorCalcSettings.Columns.Where(c => _calcs.IsEnabled(c.Key)).ToList();
+
+        CursorReadout.Children.Add(BuildReadoutRow(null, "Plot", cols, c => c.Header, isHeader: true));
+        foreach (var r in rows)
+            CursorReadout.Children.Add(BuildReadoutRow(r.ColorHex, r.Plot, cols, c => r.Get(c.Key), isHeader: false));
+    }
+
+    private UIElement BuildReadoutRow(
+        string? colorHex, string name,
+        List<(string Key, string Header, string Label)> cols,
+        Func<(string Key, string Header, string Label), string> value, bool isHeader)
+    {
+        var muted = (Brush)FindResource("MutedBrush");
+        var grid = new Grid { Margin = new Thickness(0, isHeader ? 0 : 1, 0, isHeader ? 3 : 1) };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(14) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(150) });
+        foreach (var _ in cols)
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(70) });
+
+        if (!isHeader && colorHex is not null)
+        {
+            var swatch = new Border
+            {
+                Width = 10, Height = 10, CornerRadius = new CornerRadius(2),
+                VerticalAlignment = System.Windows.VerticalAlignment.Center,
+                Background = HexBrush(colorHex),
+            };
+            Grid.SetColumn(swatch, 0);
+            grid.Children.Add(swatch);
+        }
+
+        var nameBlock = new TextBlock
+        {
+            Text = name, TextTrimming = TextTrimming.CharacterEllipsis, ToolTip = name,
+            Margin = new Thickness(4, 0, 0, 0),
+        };
+        if (isHeader) { nameBlock.FontWeight = FontWeights.SemiBold; nameBlock.Foreground = muted; }
+        Grid.SetColumn(nameBlock, 1);
+        grid.Children.Add(nameBlock);
+
+        for (var i = 0; i < cols.Count; i++)
+        {
+            var cell = new TextBlock
+            {
+                Text = value(cols[i]),
+                HorizontalAlignment = System.Windows.HorizontalAlignment.Right,
+                Margin = new Thickness(4, 0, 0, 0),
+            };
+            if (isHeader) { cell.FontWeight = FontWeights.SemiBold; cell.Foreground = muted; }
+            else if (cols[i].Key == "Delta") cell.Foreground = muted;
+            Grid.SetColumn(cell, i + 2);
+            grid.Children.Add(cell);
+        }
+        return grid;
+    }
+
+    private static Brush HexBrush(string hex)
+    {
+        try
+        {
+            var s = hex.StartsWith('#') ? hex : "#" + hex;
+            return new SolidColorBrush((System.Windows.Media.Color)ColorConverter.ConvertFromString(s));
+        }
+        catch
+        {
+            return Brushes.Gray;
+        }
+    }
+
+    private void CursorConfig_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new CursorCalcWindow(_calcs) { Owner = this };
+        if (dialog.ShowDialog() == true)
+        {
+            _calcs.Save();
+            if (_cursorsOn) UpdateCursorReadout();
+        }
     }
 
     private string BuildCursorHeader()
@@ -955,22 +1048,34 @@ public partial class MainWindow : Window
 
     private static string Fmt(double v) => double.IsFinite(v) ? v.ToString("G6") : "—";
 
-    // Min/Max/Avg of finite Y over the sample range whose X falls between the cursors.
-    private static (double Min, double Max, double Avg, int Count) RangeStats(double[] xs, double[] ys, double lo, double hi)
+    // Stats of finite Y over the sample range whose X falls between the cursors.
+    private static (double Min, double Max, double Mean, double Rms, double Std, double Integral, int Count)
+        RangeStats(double[] xs, double[] ys, double lo, double hi)
     {
         var start = LowerBound(xs, lo);
-        double min = double.PositiveInfinity, max = double.NegativeInfinity, sum = 0;
+        double min = double.PositiveInfinity, max = double.NegativeInfinity, sum = 0, sumSq = 0, integral = 0;
         var n = 0;
+        var havePrev = false;
+        double prevX = 0, prevY = 0;
         for (var i = start; i < xs.Length && xs[i] <= hi; i++)
         {
             var y = ys[i];
-            if (!double.IsFinite(y)) continue;
+            var x = xs[i];
+            if (!double.IsFinite(y)) { havePrev = false; continue; }
             if (y < min) min = y;
             if (y > max) max = y;
             sum += y;
+            sumSq += y * y;
             n++;
+            if (havePrev) integral += (x - prevX) * (y + prevY) / 2;
+            prevX = x; prevY = y; havePrev = true;
         }
-        return (min, max, n > 0 ? sum / n : double.NaN, n);
+        if (n == 0)
+            return (double.NaN, double.NaN, double.NaN, double.NaN, double.NaN, double.NaN, 0);
+        var mean = sum / n;
+        var rms = Math.Sqrt(sumSq / n);
+        var std = Math.Sqrt(Math.Max(0, sumSq / n - mean * mean));
+        return (min, max, mean, rms, std, integral, n);
     }
 
     private static int LowerBound(double[] xs, double value)

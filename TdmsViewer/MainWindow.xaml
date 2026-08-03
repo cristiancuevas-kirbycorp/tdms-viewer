@@ -448,58 +448,17 @@
                             HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10" Padding="8,6" MaxHeight="260"
                             Cursor="SizeAll" PreviewMouseLeftButtonDown="Overlay_MouseDown"
                             MouseMove="Overlay_MouseMove" MouseLeftButtonUp="Overlay_MouseUp">
+                        <Border.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Configure calculations..." Click="CursorConfig_Click" />
+                            </ContextMenu>
+                        </Border.ContextMenu>
                         <StackPanel>
                             <TextBlock x:Name="CursorHeader" FontWeight="SemiBold" Margin="0,0,0,4" />
-                            <Grid Margin="0,0,0,2">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="12" />
-                                    <ColumnDefinition Width="150" />
-                                    <ColumnDefinition Width="66" />
-                                    <ColumnDefinition Width="66" />
-                                    <ColumnDefinition Width="66" />
-                                    <ColumnDefinition Width="66" />
-                                    <ColumnDefinition Width="66" />
-                                    <ColumnDefinition Width="66" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="1" Text="Plot" FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}" Margin="4,0" />
-                                <TextBlock Grid.Column="2" Text="A" FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Right" />
-                                <TextBlock Grid.Column="3" Text="B" FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Right" />
-                                <TextBlock Grid.Column="4" Text="B-A" FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Right" />
-                                <TextBlock Grid.Column="5" Text="Min" FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Right" />
-                                <TextBlock Grid.Column="6" Text="Max" FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Right" />
-                                <TextBlock Grid.Column="7" Text="Avg" FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Right" />
-                            </Grid>
-                            <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="200">
-                                <ItemsControl x:Name="CursorItems">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Grid Margin="0,1">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="12" />
-                                                    <ColumnDefinition Width="150" />
-                                                    <ColumnDefinition Width="66" />
-                                                    <ColumnDefinition Width="66" />
-                                                    <ColumnDefinition Width="66" />
-                                                    <ColumnDefinition Width="66" />
-                                                    <ColumnDefinition Width="66" />
-                                                    <ColumnDefinition Width="66" />
-                                                </Grid.ColumnDefinitions>
-                                                <Border Grid.Column="0" Width="10" Height="10" CornerRadius="2"
-                                                        Background="{Binding ColorHex, Converter={StaticResource StringToBrush}}" />
-                                                <TextBlock Grid.Column="1" Text="{Binding Plot}" TextTrimming="CharacterEllipsis"
-                                                           ToolTip="{Binding Plot}" Margin="4,0" />
-                                                <TextBlock Grid.Column="2" Text="{Binding ValueA}" HorizontalAlignment="Right" />
-                                                <TextBlock Grid.Column="3" Text="{Binding ValueB}" HorizontalAlignment="Right" />
-                                                <TextBlock Grid.Column="4" Text="{Binding Delta}" HorizontalAlignment="Right" Foreground="{StaticResource MutedBrush}" />
-                                                <TextBlock Grid.Column="5" Text="{Binding Min}" HorizontalAlignment="Right" />
-                                                <TextBlock Grid.Column="6" Text="{Binding Max}" HorizontalAlignment="Right" />
-                                                <TextBlock Grid.Column="7" Text="{Binding Avg}" HorizontalAlignment="Right" />
-                                            </Grid>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="220">
+                                <StackPanel x:Name="CursorReadout" />
                             </ScrollViewer>
-                            <TextBlock Text="Min / Max / Avg are computed between the cursors. Drag a cursor line to move it."
+                            <TextBlock Text="Values are computed between the cursors. Drag a cursor line to move it; right-click to configure."
                                        TextWrapping="Wrap" FontSize="10" Foreground="{StaticResource MutedBrush}" Margin="0,4,0,0" />
                         </StackPanel>
                     </Border>
