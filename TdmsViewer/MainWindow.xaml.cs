@@ -603,18 +603,46 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    // Copies the plot area (including the legend and cursor overlays) to the clipboard.
+    // Copies the plot (from ScottPlot) with the legend/cursor overlays composited on top.
     private void CopyPlotImage()
     {
         try
         {
-            var dpi = VisualTreeHelper.GetDpi(PlotHost);
-            var w = (int)Math.Round(PlotHost.ActualWidth * dpi.DpiScaleX);
-            var h = (int)Math.Round(PlotHost.ActualHeight * dpi.DpiScaleY);
+            var w = (int)Math.Round(PlotHost.ActualWidth);
+            var h = (int)Math.Round(PlotHost.ActualHeight);
             if (w <= 0 || h <= 0) return;
 
-            var rtb = new RenderTargetBitmap(w, h, dpi.PixelsPerInchX, dpi.PixelsPerInchY, PixelFormats.Pbgra32);
-            rtb.Render(PlotHost);
+            // Clean plot image from ScottPlot (avoids the RenderTargetBitmap artifact on the Skia surface).
+            var png = WpfPlot.Plot.GetImage(w, h).GetImageBytes();
+            BitmapSource plotBmp;
+            using (var ms = new System.IO.MemoryStream(png))
+            {
+                var bi = new BitmapImage();
+                bi.BeginInit();
+                bi.CacheOption = BitmapCacheOption.OnLoad;
+                bi.StreamSource = ms;
+                bi.EndInit();
+                bi.Freeze();
+                plotBmp = bi;
+            }
+
+            var visual = new DrawingVisual();
+            using (var dc = visual.RenderOpen())
+            {
+                dc.DrawRectangle(Brushes.White, null, new Rect(0, 0, w, h));
+                dc.DrawImage(plotBmp, new Rect(0, 0, w, h));
+                foreach (var overlay in new FrameworkElement[] { GraphLegend, CursorPanel })
+                {
+                    if (overlay.Visibility != Visibility.Visible || overlay.ActualWidth <= 0 || overlay.ActualHeight <= 0)
+                        continue;
+                    var ob = RenderElement(overlay);
+                    var pos = overlay.TranslatePoint(new Point(0, 0), PlotHost);
+                    dc.DrawImage(ob, new Rect(pos.X, pos.Y, overlay.ActualWidth, overlay.ActualHeight));
+                }
+            }
+
+            var rtb = new RenderTargetBitmap(w, h, 96, 96, PixelFormats.Pbgra32);
+            rtb.Render(visual);
             rtb.Freeze();
             Clipboard.SetImage(rtb);
         }
@@ -624,6 +652,16 @@ public partial class MainWindow : Window
             MessageBox.Show(this, $"Could not copy the image.\n{ex.Message}", "Copy image",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
+    }
+
+    private static RenderTargetBitmap RenderElement(FrameworkElement el)
+    {
+        var w = Math.Max(1, (int)Math.Ceiling(el.ActualWidth));
+        var h = Math.Max(1, (int)Math.Ceiling(el.ActualHeight));
+        var rtb = new RenderTargetBitmap(w, h, 96, 96, PixelFormats.Pbgra32);
+        rtb.Render(el);
+        rtb.Freeze();
+        return rtb;
     }
 
     // Scroll wheel zooms only the shared time (X) axis, centered on the cursor.
