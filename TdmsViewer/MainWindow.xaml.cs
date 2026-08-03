@@ -1036,6 +1036,78 @@ public partial class MainWindow : Window
         }
     }
 
+    private void CopyPropertyValue_Click(object sender, RoutedEventArgs e) => CopyProperty(sender, r => r.Value);
+    private void CopyPropertyName_Click(object sender, RoutedEventArgs e) => CopyProperty(sender, r => r.Name);
+    private void CopyPropertyBoth_Click(object sender, RoutedEventArgs e) => CopyProperty(sender, r => $"{r.Name}: {r.Value}");
+
+    private static void CopyProperty(object sender, Func<PropertyRow, string> pick)
+    {
+        if (sender is MenuItem { DataContext: PropertyRow row })
+        {
+            try { Clipboard.SetText(pick(row) ?? string.Empty); } catch { /* clipboard may be busy */ }
+        }
+    }
+
+    // Builds the cursor readout table for a page's PDF, mirroring the on-screen readout.
+    private PdfCursorReadout? BuildPrintCursorData(PageViewModel page)
+    {
+        if (!page.Model.CursorsOn || page.Model.CursorA is not double ca || page.Model.CursorB is not double cb)
+            return null;
+
+        var lo = Math.Min(ca, cb);
+        var hi = Math.Max(ca, cb);
+        var dx = cb - ca;
+        var cols = CursorCalcSettings.Columns.Where(c => _calcs.IsEnabled(c.Key)).ToList();
+        var rows = new List<PdfCursorRow>();
+        var anyDateTime = false;
+
+        foreach (var series in page.Series.Where(s => s.Visible))
+        {
+            double[] xs, ys;
+            try
+            {
+                var data = _vm.GetSeriesData(series.Model);
+                xs = data.X; ys = data.Y;
+                anyDateTime |= data.XIsDateTime;
+            }
+            catch (Exception ex) { App.Log(ex); continue; }
+            if (ys.Length == 0) continue;
+
+            var (ia, okA) = NearestIndex(xs, ca);
+            var (ib, okB) = NearestIndex(xs, cb);
+            var va = okA ? ys[ia] : double.NaN;
+            var vb = okB ? ys[ib] : double.NaN;
+            var bothAB = double.IsFinite(va) && double.IsFinite(vb);
+            var (mn, mx, mean, rms, std, integral, n) = RangeStats(xs, ys, lo, hi);
+            var slope = bothAB && dx != 0 ? (vb - va) / dx : double.NaN;
+
+            string V(string key) => key switch
+            {
+                "ValueA" => Fmt(va),
+                "ValueB" => Fmt(vb),
+                "Delta" => bothAB ? Fmt(vb - va) : "\u2014",
+                "Min" => n > 0 ? Fmt(mn) : "\u2014",
+                "Max" => n > 0 ? Fmt(mx) : "\u2014",
+                "PeakToPeak" => n > 0 ? Fmt(mx - mn) : "\u2014",
+                "Mean" => n > 0 ? Fmt(mean) : "\u2014",
+                "Rms" => n > 0 ? Fmt(rms) : "\u2014",
+                "StdDev" => n > 0 ? Fmt(std) : "\u2014",
+                "Integral" => n > 0 ? Fmt(integral) : "\u2014",
+                "Slope" => double.IsFinite(slope) ? Fmt(slope) : "\u2014",
+                _ => string.Empty,
+            };
+            rows.Add(new PdfCursorRow(series.DisplayName, series.ColorHex, cols.Select(c => V(c.Key)).ToList()));
+        }
+        if (rows.Count == 0) return null;
+
+        string X(double x) => anyDateTime ? DateTime.FromOADate(x).ToString("HH:mm:ss") : x.ToString("G6");
+        var dtText = anyDateTime ? TimeSpan.FromDays(Math.Abs(dx)).ToString(@"hh\:mm\:ss") : Math.Abs(dx).ToString("G4");
+        var header = $"A {X(ca)}    B {X(cb)}    \u0394t {dtText}";
+
+        return new PdfCursorReadout(header, cols.Select(c => c.Header).ToList(), rows,
+            page.Model.CursorX ?? 0.02, page.Model.CursorY ?? 0.02);
+    }
+
     private string BuildCursorHeader()
     {
         string X(double x) => _renderedDateTime ? DateTime.FromOADate(x).ToString("HH:mm:ss") : x.ToString("G6");
@@ -1287,7 +1359,7 @@ public partial class MainWindow : Window
         try
         {
             var tdmsName = _vm.ActiveWorkspace is { } ws ? System.IO.Path.GetFileName(ws.Path) : string.Empty;
-            new ReportPdfService().Build(report, pages, tdmsName, dialog.FileName, RenderPageImage);
+            new ReportPdfService().Build(report, pages, tdmsName, dialog.FileName, RenderPageImage, BuildPrintCursorData);
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dialog.FileName) { UseShellExecute = true });
         }
         catch (Exception ex)

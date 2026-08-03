@@ -24,7 +24,8 @@ public sealed class ReportPdfService
         IReadOnlyList<PageViewModel> pages,
         string tdmsFileName,
         string outputPath,
-        Func<PageViewModel, int, int, byte[]?> renderPlot)
+        Func<PageViewModel, int, int, byte[]?> renderPlot,
+        Func<PageViewModel, PdfCursorReadout?> cursorFor)
     {
         var doc = new PdfDocument();
         var temps = new List<string>();
@@ -32,7 +33,7 @@ public sealed class ReportPdfService
         {
             for (var i = 0; i < pages.Count; i++)
             {
-                var png = ComposePage(report, pages[i], i, pages.Count, tdmsFileName, renderPlot);
+                var png = ComposePage(report, pages[i], i, pages.Count, tdmsFileName, renderPlot, cursorFor);
                 var tmp = Path.Combine(Path.GetTempPath(), $"tvpdf_{Guid.NewGuid():N}.png");
                 File.WriteAllBytes(tmp, png);
                 temps.Add(tmp);
@@ -55,7 +56,8 @@ public sealed class ReportPdfService
 
     private static byte[] ComposePage(
         ReportViewModel report, PageViewModel page, int index, int count, string tdmsFileName,
-        Func<PageViewModel, int, int, byte[]?> renderPlot)
+        Func<PageViewModel, int, int, byte[]?> renderPlot,
+        Func<PageViewModel, PdfCursorReadout?> cursorFor)
     {
         var margin = (int)(PageW * 0.01);
         var headerH = (int)(PageH * 0.035);
@@ -89,6 +91,10 @@ public sealed class ReportPdfService
             using var img = Image.FromStream(ms);
             g.DrawImage(img, plotX, plotY, plotW, plotH);
         }
+
+        // Cursor readout overlay (when cursors are on for this page).
+        if (cursorFor(page) is { } readout)
+            DrawCursorReadout(g, readout, plotX, plotY, plotW, plotH);
 
         g.DrawLine(divider, margin, PageH - margin - footerH, PageW - margin, PageH - margin - footerH);
         var footerRect = new RectangleF(margin, PageH - margin - footerH, PageW - 2 * margin, footerH);
@@ -151,4 +157,81 @@ public sealed class ReportPdfService
         using var brush = new SolidBrush(Color.FromArgb(45, 45, 45));
         g.DrawString(text, font, brush, rect, sf);
     }
+
+    // Draws the cursor readout table at its saved fractional position within the plot rectangle.
+    private static void DrawCursorReadout(Graphics g, PdfCursorReadout r, float plotX, float plotY, float plotW, float plotH)
+    {
+        using var font = new Font("Segoe UI", PageH * 0.0075f);
+        using var headerFont = new Font("Segoe UI", PageH * 0.0075f, FontStyle.Bold);
+
+        var pad = PageW * 0.005f;
+        var swatchW = PageW * 0.012f;
+        var nameW = PageW * 0.15f;
+        var colW = PageW * 0.065f;
+        var rowH = font.GetHeight(g) + 3;
+
+        using var sfRight = new StringFormat { Alignment = StringAlignment.Far, FormatFlags = StringFormatFlags.NoWrap };
+        using var sfName = new StringFormat { Trimming = StringTrimming.EllipsisCharacter, FormatFlags = StringFormatFlags.NoWrap };
+
+        var colsWidth = swatchW + nameW + r.Columns.Count * colW;
+        var headerWidth = g.MeasureString(r.Header, headerFont).Width;
+        var tableW = Math.Max(colsWidth, headerWidth) + pad * 2;
+        var tableH = rowH * (r.Rows.Count + 2) + pad * 2;
+
+        var x0 = plotX + (float)r.X * plotW;
+        var y0 = plotY + (float)r.Y * plotH;
+        x0 = Math.Clamp(x0, plotX, plotX + plotW - tableW);
+        y0 = Math.Clamp(y0, plotY, plotY + plotH - tableH);
+
+        using var bg = new SolidBrush(Color.FromArgb(235, 255, 255, 255));
+        using var border = new Pen(Color.FromArgb(200, 200, 200));
+        g.FillRectangle(bg, x0, y0, tableW, tableH);
+        g.DrawRectangle(border, x0, y0, tableW, tableH);
+
+        using var text = new SolidBrush(Color.FromArgb(45, 45, 45));
+        using var muted = new SolidBrush(Color.FromArgb(120, 120, 120));
+
+        var nameX = x0 + pad + swatchW;
+        var valuesX = nameX + nameW;
+        var cy = y0 + pad;
+
+        g.DrawString(r.Header, headerFont, text, x0 + pad, cy);
+        cy += rowH;
+
+        g.DrawString("Plot", font, muted, nameX, cy);
+        for (var i = 0; i < r.Columns.Count; i++)
+            g.DrawString(r.Columns[i], font, muted, new RectangleF(valuesX + i * colW, cy, colW, rowH), sfRight);
+        cy += rowH;
+
+        foreach (var row in r.Rows)
+        {
+            using (var sw = new SolidBrush(ParseColor(row.ColorHex)))
+                g.FillRectangle(sw, x0 + pad, cy + rowH * 0.28f, swatchW * 0.6f, rowH * 0.45f);
+            g.DrawString(row.Name, font, text, new RectangleF(nameX, cy, nameW, rowH), sfName);
+            for (var i = 0; i < row.Values.Count; i++)
+                g.DrawString(row.Values[i], font, text, new RectangleF(valuesX + i * colW, cy, colW, rowH), sfRight);
+            cy += rowH;
+        }
+    }
+
+    private static Color ParseColor(string hex)
+    {
+        try
+        {
+            var s = hex.TrimStart('#');
+            return Color.FromArgb(
+                Convert.ToInt32(s.Substring(0, 2), 16),
+                Convert.ToInt32(s.Substring(2, 2), 16),
+                Convert.ToInt32(s.Substring(4, 2), 16));
+        }
+        catch
+        {
+            return Color.Gray;
+        }
+    }
 }
+
+/// <summary>Cursor readout table for the printed PDF (built by the UI, drawn by the service).</summary>
+public sealed record PdfCursorReadout(string Header, IReadOnlyList<string> Columns, IReadOnlyList<PdfCursorRow> Rows, double X, double Y);
+
+public sealed record PdfCursorRow(string Name, string ColorHex, IReadOnlyList<string> Values);
