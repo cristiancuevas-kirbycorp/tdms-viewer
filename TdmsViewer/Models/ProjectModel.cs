@@ -54,6 +54,24 @@ public sealed class PageModel
     /// <summary>Saved time (X) view for this page; null means auto-fit. Restored when the page is reopened.</summary>
     public double? XMin { get; set; }
     public double? XMax { get; set; }
+
+    /// <summary>Two time cursors: on/off and their X positions, saved per page.</summary>
+    public bool CursorsOn { get; set; }
+    public double? CursorA { get; set; }
+    public double? CursorB { get; set; }
+
+    /// <summary>Corners for the graph legend and the cursor readout overlay.</summary>
+    public PlotCorner LegendCorner { get; set; } = PlotCorner.BottomRight;
+    public PlotCorner CursorCorner { get; set; } = PlotCorner.TopLeft;
+}
+
+/// <summary>A corner of the plot area used to place the legend / cursor overlays.</summary>
+public enum PlotCorner
+{
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
 }
 
 /// <summary>A first-class Y-scale (LabVIEW scale-legend style): named, sided, auto or fixed.</summary>

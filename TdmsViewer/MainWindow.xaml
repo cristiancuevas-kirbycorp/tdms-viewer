@@ -274,7 +274,7 @@
                     </DockPanel>
                 </Grid>
 
-                <Grid AllowDrop="True" DragOver="Plot_DragOver" Drop="Plot_Drop" ClipToBounds="True">
+                <Grid x:Name="PlotHost" AllowDrop="True" DragOver="Plot_DragOver" Drop="Plot_Drop" ClipToBounds="True">
                     <sp:WpfPlot x:Name="WpfPlot" ClipToBounds="True" PreviewMouseWheel="Plot_PreviewMouseWheel"
                                 MouseLeftButtonDown="Plot_MouseLeftButtonDown"
                                 MouseMove="Plot_MouseMove"
@@ -422,9 +422,32 @@
                         </StackPanel>
                     </Border>
 
+                    <!-- Graph legend (draggable, snaps to corners) -->
+                    <Border x:Name="GraphLegend" Visibility="Collapsed" Background="#F2FFFFFF"
+                            BorderBrush="{StaticResource BorderLightBrush}" BorderThickness="1" CornerRadius="6"
+                            HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="10" Padding="8,6" MaxHeight="320"
+                            Cursor="SizeAll" MouseLeftButtonDown="Overlay_MouseDown"
+                            MouseMove="Overlay_MouseMove" MouseLeftButtonUp="Overlay_MouseUp">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="300">
+                            <ItemsControl x:Name="LegendItems">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal" Margin="0,1">
+                                            <Border Width="18" Height="4" CornerRadius="2" VerticalAlignment="Center" Margin="0,0,6,0"
+                                                    Background="{Binding ColorHex, Converter={StaticResource StringToBrush}}" />
+                                            <TextBlock Text="{Binding Name}" FontSize="13" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Border>
+
                     <Border x:Name="CursorPanel" Visibility="Collapsed" Background="#F2FFFFFF"
                             BorderBrush="{StaticResource BorderLightBrush}" BorderThickness="1" CornerRadius="6"
-                            HorizontalAlignment="Left" VerticalAlignment="Top" Margin="12" Padding="8,6" MaxHeight="260">
+                            HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10" Padding="8,6" MaxHeight="260"
+                            Cursor="SizeAll" MouseLeftButtonDown="Overlay_MouseDown"
+                            MouseMove="Overlay_MouseMove" MouseLeftButtonUp="Overlay_MouseUp">
                         <StackPanel>
                             <TextBlock x:Name="CursorHeader" FontWeight="SemiBold" Margin="0,0,0,4" />
                             <Grid Margin="0,0,0,2">

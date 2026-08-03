@@ -34,6 +34,9 @@ public partial class MainWindow : Window
     private readonly List<(string Name, double[] X, double[] Y, string ColorHex, bool Dt)> _rendered = new();
     private bool _renderedDateTime;
     private List<AxisViewModel> _renderedScales = new();
+    private FrameworkElement? _dragOverlay;
+    private Point _dragOffset;
+    private bool _restoringCursors;
 
     public string AppVersion { get; }
 
@@ -236,6 +239,9 @@ public partial class MainWindow : Window
         var priorXLeft = plot.Axes.Bottom.Min;
         var priorXRight = plot.Axes.Bottom.Max;
         plot.Clear();
+        plot.HideLegend();
+        _cursorLines.Clear();
+        _cursorBand = null;
         _rendered.Clear();
         plot.Axes.Remove(ScottPlot.Edge.Left);
         plot.Axes.Remove(ScottPlot.Edge.Right);
@@ -244,6 +250,8 @@ public partial class MainWindow : Window
         if (page is null)
         {
             plot.Axes.AddLeftAxis();
+            GraphLegend.Visibility = Visibility.Collapsed;
+            CursorPanel.Visibility = Visibility.Collapsed;
             WpfPlot.Refresh();
             return;
         }
@@ -353,9 +361,21 @@ public partial class MainWindow : Window
         _hasPlotContent = axisExtents.Any(a => a.Has);
         _renderedDateTime = _rendered.Any(r => r.Dt);
         _renderedScales = axisExtents.Select(a => a.Scale).ToList();
-        if (_cursorsOn)
-            DrawCursors();
+        UpdatePlotOverlays();
         WpfPlot.Refresh();
+    }
+
+    // Refreshes the WPF legend items and restores overlay corners + cursors for the active page.
+    private void UpdatePlotOverlays()
+    {
+        var items = _rendered.Select(r => new LegendItem(r.Name, r.ColorHex)).ToList();
+        LegendItems.ItemsSource = items;
+        GraphLegend.Visibility = items.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        if (_vm.SelectedPage is not { } page) return;
+        PositionOverlay(GraphLegend, page.Model.LegendCorner);
+        PositionOverlay(CursorPanel, page.Model.CursorCorner);
+        RestoreCursorsForPage(page);
     }
 
     private static (double Min, double Max, bool Has) FiniteExtent(double[] values)
@@ -685,6 +705,12 @@ public partial class MainWindow : Window
             _draggingCursor = -1;
             WpfPlot.ReleaseMouseCapture();
             WpfPlot.Cursor = Cursors.Arrow;
+            if (_vm.SelectedPage is { } page)
+            {
+                page.Model.CursorA = _cursorX[0];
+                page.Model.CursorB = _cursorX[1];
+                _vm.ScheduleAutoSave();
+            }
             return;
         }
         if (!_panning) return;
@@ -701,6 +727,7 @@ public partial class MainWindow : Window
 
     private void Cursors_Checked(object sender, RoutedEventArgs e)
     {
+        if (_restoringCursors) return;
         _cursorsOn = true;
         var limits = WpfPlot.Plot.Axes.GetLimits();
         if (double.IsFinite(limits.Left) && limits.Right > limits.Left)
@@ -709,6 +736,14 @@ public partial class MainWindow : Window
             _cursorX[0] = limits.Left + span * 0.33;
             _cursorX[1] = limits.Left + span * 0.66;
         }
+        if (_vm.SelectedPage is { } page)
+        {
+            page.Model.CursorsOn = true;
+            page.Model.CursorA = _cursorX[0];
+            page.Model.CursorB = _cursorX[1];
+            PositionOverlay(CursorPanel, page.Model.CursorCorner);
+            _vm.ScheduleAutoSave();
+        }
         CursorPanel.Visibility = Visibility.Visible;
         DrawCursors();
         WpfPlot.Refresh();
@@ -716,11 +751,135 @@ public partial class MainWindow : Window
 
     private void Cursors_Unchecked(object sender, RoutedEventArgs e)
     {
+        if (_restoringCursors) return;
         _cursorsOn = false;
         RemoveCursorPlottables();
         CursorPanel.Visibility = Visibility.Collapsed;
+        if (_vm.SelectedPage is { } page)
+        {
+            page.Model.CursorsOn = false;
+            _vm.ScheduleAutoSave();
+        }
         WpfPlot.Refresh();
     }
+
+    // Applies the saved cursor state for a page after a render (called from UpdatePlotOverlays).
+    private void RestoreCursorsForPage(PageViewModel page)
+    {
+        _restoringCursors = true;
+        CursorToggle.IsChecked = page.Model.CursorsOn;
+        _restoringCursors = false;
+
+        if (page.Model.CursorsOn)
+        {
+            _cursorsOn = true;
+            var limits = WpfPlot.Plot.Axes.GetLimits();
+            var span = limits.Right - limits.Left;
+            _cursorX[0] = page.Model.CursorA ?? (double.IsFinite(limits.Left) ? limits.Left + span * 0.33 : 0);
+            _cursorX[1] = page.Model.CursorB ?? (double.IsFinite(limits.Left) ? limits.Left + span * 0.66 : 1);
+            DrawCursors();
+            CursorPanel.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            _cursorsOn = false;
+            RemoveCursorPlottables();
+            CursorPanel.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    // --- Draggable corner overlays (graph legend + cursor readout) ---
+
+    private void Overlay_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not FrameworkElement el) return;
+        _dragOverlay = el;
+        var p = e.GetPosition(PlotHost);
+        var tl = el.TranslatePoint(new Point(0, 0), PlotHost);
+        _dragOffset = new Point(p.X - tl.X, p.Y - tl.Y);
+        el.CaptureMouse();
+        e.Handled = true;
+    }
+
+    private void Overlay_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (_dragOverlay is null || e.LeftButton != MouseButtonState.Pressed) return;
+        var p = e.GetPosition(PlotHost);
+        _dragOverlay.HorizontalAlignment = System.Windows.HorizontalAlignment.Left;
+        _dragOverlay.VerticalAlignment = System.Windows.VerticalAlignment.Top;
+        _dragOverlay.Margin = new Thickness(Math.Max(0, p.X - _dragOffset.X), Math.Max(0, p.Y - _dragOffset.Y), 0, 0);
+        e.Handled = true;
+    }
+
+    private void Overlay_MouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (_dragOverlay is null) return;
+        var el = _dragOverlay;
+        _dragOverlay = null;
+        el.ReleaseMouseCapture();
+
+        var tl = el.TranslatePoint(new Point(0, 0), PlotHost);
+        var right = tl.X + el.ActualWidth / 2 > PlotHost.ActualWidth / 2;
+        var bottom = tl.Y + el.ActualHeight / 2 > PlotHost.ActualHeight / 2;
+        var corner = (right, bottom) switch
+        {
+            (false, false) => PlotCorner.TopLeft,
+            (true, false) => PlotCorner.TopRight,
+            (false, true) => PlotCorner.BottomLeft,
+            _ => PlotCorner.BottomRight,
+        };
+        ApplyOverlayCorner(el, corner);
+        e.Handled = true;
+    }
+
+    private void PositionOverlay(FrameworkElement el, PlotCorner corner)
+    {
+        el.HorizontalAlignment = corner is PlotCorner.TopLeft or PlotCorner.BottomLeft
+            ? System.Windows.HorizontalAlignment.Left : System.Windows.HorizontalAlignment.Right;
+        el.VerticalAlignment = corner is PlotCorner.TopLeft or PlotCorner.TopRight
+            ? System.Windows.VerticalAlignment.Top : System.Windows.VerticalAlignment.Bottom;
+        el.Margin = new Thickness(10);
+    }
+
+    // Assigns a corner to one overlay and pushes the other away so the two never overlap.
+    private void ApplyOverlayCorner(FrameworkElement el, PlotCorner corner)
+    {
+        if (_vm.SelectedPage is not { } page)
+        {
+            PositionOverlay(el, corner);
+            return;
+        }
+
+        var isLegend = ReferenceEquals(el, GraphLegend);
+        var otherCorner = isLegend ? page.Model.CursorCorner : page.Model.LegendCorner;
+        if (otherCorner == corner)
+        {
+            var moved = FirstFreeCorner(corner);
+            if (isLegend) page.Model.CursorCorner = moved; else page.Model.LegendCorner = moved;
+        }
+        if (isLegend) page.Model.LegendCorner = corner; else page.Model.CursorCorner = corner;
+
+        PositionOverlay(GraphLegend, page.Model.LegendCorner);
+        PositionOverlay(CursorPanel, page.Model.CursorCorner);
+        _vm.ScheduleAutoSave();
+    }
+
+    private static PlotCorner FirstFreeCorner(PlotCorner taken)
+    {
+        foreach (var c in new[] { PlotCorner.TopLeft, PlotCorner.TopRight, PlotCorner.BottomLeft, PlotCorner.BottomRight })
+            if (c != taken) return c;
+        return PlotCorner.TopLeft;
+    }
+
+    private static ScottPlot.Alignment MapCorner(PlotCorner c) => c switch
+    {
+        PlotCorner.TopLeft => ScottPlot.Alignment.UpperLeft,
+        PlotCorner.TopRight => ScottPlot.Alignment.UpperRight,
+        PlotCorner.BottomLeft => ScottPlot.Alignment.LowerLeft,
+        _ => ScottPlot.Alignment.LowerRight,
+    };
+
+    private sealed record LegendItem(string Name, string ColorHex);
 
     private void RemoveCursorPlottables()
     {
@@ -1121,6 +1280,32 @@ public partial class MainWindow : Window
                     else if (has) { (ya, yb) = PadY(min, max); }
                     else continue;
                     plot.Axes.SetLimits(new AxisLimits(xa, xb, ya, yb), plot.Axes.Bottom, axis);
+                }
+            }
+
+            // Legend at the page's saved corner (bigger than the default).
+            if (page.Series.Any(s => s.Visible))
+            {
+                plot.ShowLegend();
+                plot.Legend.Alignment = MapCorner(page.Model.LegendCorner);
+                plot.Legend.FontSize = 16;
+            }
+
+            // Cursors, if the page has them on.
+            if (page.Model.CursorsOn && page.Model.CursorA is double ca && page.Model.CursorB is double cb)
+            {
+                var band = plot.Add.HorizontalSpan(Math.Min(ca, cb), Math.Max(ca, cb));
+                band.FillColor = ScottPlot.Color.FromHex("2D7DD2").WithAlpha(28);
+                band.LineColor = ScottPlot.Colors.Transparent;
+                foreach (var (cx, label, color) in new[] { (ca, "A", CursorColorA), (cb, "B", CursorColorB) })
+                {
+                    var vl = plot.Add.VerticalLine(cx);
+                    vl.Color = color;
+                    vl.LineWidth = 2.5f;
+                    vl.LinePattern = ScottPlot.LinePattern.Dotted;
+                    vl.Text = label;
+                    vl.LabelStyle.Bold = true;
+                    vl.LabelStyle.FontSize = 14;
                 }
             }
 
