@@ -657,14 +657,10 @@ public partial class MainWindow : Window
         var oh = overlay.ActualHeight;
         if (ow <= 0 || oh <= 0) return;
 
-        var dpi = VisualTreeHelper.GetDpi(overlay);
-        var bmp = new RenderTargetBitmap(
-            (int)Math.Round(ow * dpi.DpiScaleX), (int)Math.Round(oh * dpi.DpiScaleY),
-            dpi.PixelsPerInchX, dpi.PixelsPerInchY, PixelFormats.Pbgra32);
-        bmp.Render(overlay);
-
+        // A VisualBrush paints the panel in isolation, so its layout position doesn't clip the capture.
         var pos = overlay.TranslatePoint(new Point(0, 0), PlotHost);
-        dc.DrawImage(bmp, new Rect(pos.X, pos.Y, ow, oh));
+        var brush = new VisualBrush(overlay) { Stretch = Stretch.Fill };
+        dc.DrawRectangle(brush, null, new Rect(pos.X, pos.Y, ow, oh));
     }
 
     // Scroll wheel zooms only the shared time (X) axis, centered on the cursor.
