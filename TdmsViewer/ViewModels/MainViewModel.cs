@@ -225,6 +225,36 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private async Task OpenZippedFolderAsync()
+    {
+        using var dialog = new System.Windows.Forms.FolderBrowserDialog
+        {
+            Description = "Select a folder of zipped TDMS files to merge",
+            UseDescriptionForTitle = true,
+        };
+        if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
+
+        var folder = dialog.SelectedPath;
+        var progress = new Progress<string>(m => StatusText = m);
+        BusyTitle = "Merging TDMS files...";
+        IsBusy = true;
+        try
+        {
+            var merged = await Task.Run(() => new FolderMergeService().MergeZippedFolder(folder, progress));
+            // Opening defragments the concatenated result into a single clean segment.
+            AddOrActivateWorkspace(merged);
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Merge failed: {ex.Message}";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    [RelayCommand]
     private void OpenRecent(RecentFile? file)
     {
         if (file is null) return;

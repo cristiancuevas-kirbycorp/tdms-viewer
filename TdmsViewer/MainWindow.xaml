@@ -33,6 +33,7 @@
         <Menu DockPanel.Dock="Top">
             <MenuItem Header="_File">
                 <MenuItem Header="_Open TDMS..." Command="{Binding OpenTdmsCommand}" />
+                <MenuItem Header="Open _Zipped Folder (merge)..." Command="{Binding OpenZippedFolderCommand}" />
                 <MenuItem Header="Open _Recent" ItemsSource="{Binding RecentFiles}">
                     <MenuItem.ItemContainerStyle>
                         <Style TargetType="MenuItem">
