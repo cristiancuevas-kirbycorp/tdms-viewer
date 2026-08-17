@@ -33,6 +33,9 @@ public partial class MainWindow : Window
     private ScottPlot.Plottables.HorizontalSpan? _cursorBand;
     private int _draggingCursor = -1;
     private readonly List<(string Name, double[] X, double[] Y, string ColorHex, bool Dt)> _rendered = new();
+    // Maps a series row to a setter for its plotted line width plus the width to restore on mouse-leave.
+    private readonly Dictionary<SeriesViewModel, (Action<float> SetWidth, float BaseWidth)> _seriesLines = new();
+    private SeriesViewModel? _hoveredSeries;
     private bool _renderedDateTime;
     private List<AxisViewModel> _renderedScales = new();
     private FrameworkElement? _dragOverlay;
@@ -251,6 +254,7 @@ public partial class MainWindow : Window
         _cursorLines.Clear();
         _cursorBand = null;
         _rendered.Clear();
+        _seriesLines.Clear();
         plot.Axes.Remove(ScottPlot.Edge.Left);
         plot.Axes.Remove(ScottPlot.Edge.Right);
 
@@ -290,7 +294,7 @@ public partial class MainWindow : Window
                     var data = _vm.GetSeriesData(series.Model);
                     if (data.Y.Length == 0) continue;
 
-                    AddSeries(plot, series, data, axis);
+                    AddSeries(plot, series, data, axis, _seriesLines);
                     anyDateTime |= data.XIsDateTime;
                     _rendered.Add((series.DisplayName, data.X, data.Y, series.ColorHex, data.XIsDateTime));
 
@@ -421,7 +425,8 @@ public partial class MainWindow : Window
     }
 
     /// <summary>Adds a series: fast SignalXY for line-only ascending data, Scatter otherwise (markers or unsorted X).</summary>
-    private static void AddSeries(Plot plot, SeriesViewModel series, ChannelData data, IYAxis axis)
+    private static void AddSeries(Plot plot, SeriesViewModel series, ChannelData data, IYAxis axis,
+        Dictionary<SeriesViewModel, (Action<float> SetWidth, float BaseWidth)>? lines = null)
     {
         var color = ScottPlot.Color.FromHex(series.ColorHex.TrimStart('#'));
         var pattern = series.LineStyle switch
@@ -431,21 +436,24 @@ public partial class MainWindow : Window
             _ => ScottPlot.LinePattern.Solid,
         };
 
+        var baseWidth = (float)series.LineWidth;
+
         // SignalXY requires strictly ascending X; fall back to Scatter when it isn't (or when markers are on).
         if (series.Marker == SeriesMarker.None && IsAscending(data.X))
         {
             var s = plot.Add.SignalXY(data.X, data.Y);
             s.Color = color;
-            s.LineWidth = (float)series.LineWidth;
+            s.LineWidth = baseWidth;
             s.LineStyle.Pattern = pattern;
             s.LegendText = series.DisplayName;
             s.Axes.YAxis = axis;
+            if (lines is not null) lines[series] = (w => s.LineWidth = w, baseWidth);
         }
         else
         {
             var s = plot.Add.Scatter(data.X, data.Y);
             s.Color = color;
-            s.LineWidth = (float)series.LineWidth;
+            s.LineWidth = baseWidth;
             s.LineStyle.Pattern = pattern;
             s.MarkerShape = series.Marker switch
             {
@@ -458,7 +466,38 @@ public partial class MainWindow : Window
             s.MarkerSize = (float)series.Model.MarkerSize;
             s.LegendText = series.DisplayName;
             s.Axes.YAxis = axis;
+            if (lines is not null) lines[series] = (w => s.LineWidth = w, baseWidth);
         }
+    }
+
+    // Emphasis added to a channel's line width while its row is hovered.
+    private const float HoverLineWidthBoost = 3f;
+
+    private void SeriesRow_MouseEnter(object sender, MouseEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: SeriesViewModel series }) return;
+        ApplyHover(series);
+    }
+
+    private void SeriesRow_MouseLeave(object sender, MouseEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: SeriesViewModel series }) return;
+        if (_hoveredSeries != series) return;
+        ApplyHover(null);
+    }
+
+    // Thickens the hovered series' line (and restores any previously hovered one) without a full re-render.
+    private void ApplyHover(SeriesViewModel? series)
+    {
+        if (_hoveredSeries is { } prev && _seriesLines.TryGetValue(prev, out var prevLine))
+            prevLine.SetWidth(prevLine.BaseWidth);
+
+        _hoveredSeries = series;
+
+        if (series is not null && _seriesLines.TryGetValue(series, out var line))
+            line.SetWidth(line.BaseWidth + HoverLineWidthBoost);
+
+        WpfPlot.Refresh();
     }
 
     private static bool IsAscending(double[] x)

@@ -213,6 +213,12 @@
                     <DataGrid ItemsSource="{Binding SelectedPage.Series}" AutoGenerateColumns="False"
                               CanUserAddRows="False" HeadersVisibility="Column" GridLinesVisibility="Horizontal"
                               SelectionMode="Single">
+                        <DataGrid.RowStyle>
+                            <Style TargetType="DataGridRow">
+                                <EventSetter Event="MouseEnter" Handler="SeriesRow_MouseEnter" />
+                                <EventSetter Event="MouseLeave" Handler="SeriesRow_MouseLeave" />
+                            </Style>
+                        </DataGrid.RowStyle>
                         <DataGrid.Columns>
                             <DataGridCheckBoxColumn Header="Show" Binding="{Binding Visible, UpdateSourceTrigger=PropertyChanged}" Width="40" />
                             <DataGridTemplateColumn Header="Color" Width="50">
