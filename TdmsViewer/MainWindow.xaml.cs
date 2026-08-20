@@ -147,6 +147,104 @@ public partial class MainWindow : Window
         }
     }
 
+    private void ReportsTree_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        var item = FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject);
+        if (item?.DataContext is ReportViewModel or PageViewModel)
+        {
+            BeginReportsTreeRename(item.DataContext);
+            e.Handled = true;
+        }
+    }
+
+    private void ReportsTree_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.F2) return;
+        if (BeginReportsTreeRename(ReportsTree.SelectedItem))
+            e.Handled = true;
+    }
+
+    private void ReportsTreeRename_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: MenuItem { DataContext: { } node } })
+            BeginReportsTreeRename(node);
+    }
+
+    private bool BeginReportsTreeRename(object? node)
+    {
+        switch (node)
+        {
+            case ReportViewModel report:
+                report.IsEditing = true;
+                return true;
+            case PageViewModel page:
+                page.IsEditing = true;
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private void ReportsTreeRename_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (sender is TextBox { IsVisible: true } tb)
+        {
+            tb.Tag = tb.Text;
+            tb.Focus();
+            tb.SelectAll();
+        }
+    }
+
+    private void ReportsTreeRename_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (sender is not TextBox tb) return;
+        if (e.Key == Key.Enter)
+        {
+            CommitReportsTreeRename(tb, cancel: false);
+            Keyboard.ClearFocus();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            CommitReportsTreeRename(tb, cancel: true);
+            Keyboard.ClearFocus();
+            e.Handled = true;
+        }
+    }
+
+    private void ReportsTreeRename_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is TextBox tb)
+            CommitReportsTreeRename(tb, cancel: false);
+    }
+
+    private void CommitReportsTreeRename(TextBox tb, bool cancel)
+    {
+        switch (tb.DataContext)
+        {
+            case ReportViewModel report:
+                if (cancel)
+                    report.Name = tb.Tag as string ?? report.Name;
+                if (string.IsNullOrWhiteSpace(report.Name))
+                    report.Name = "Report";
+                report.IsEditing = false;
+                break;
+
+            case PageViewModel page:
+                if (cancel)
+                    page.Name = tb.Tag as string ?? page.Name;
+                if (string.IsNullOrWhiteSpace(page.Name))
+                    page.Name = "Graph";
+                page.IsEditing = false;
+                break;
+
+            default:
+                return;
+        }
+
+        _vm.ScheduleAutoSave();
+    }
+
     private void ChannelsTree_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
         if (ChannelsTree.SelectedItem is ChannelTreeItemViewModel { IsGroup: false, Channel: { } info })

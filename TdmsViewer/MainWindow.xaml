@@ -151,6 +151,8 @@
                            Foreground="{StaticResource MutedBrush}" Margin="10" VerticalAlignment="Top"
                            Visibility="{Binding IsFileLoaded, Converter={StaticResource InverseBoolToVisibility}}" />
                 <TreeView x:Name="ReportsTree" SelectedItemChanged="ReportsTree_SelectedItemChanged"
+                          MouseDoubleClick="ReportsTree_MouseDoubleClick"
+                          PreviewKeyDown="ReportsTree_PreviewKeyDown"
                           Visibility="{Binding IsFileLoaded, Converter={StaticResource BoolToVis}}"
                           ItemsSource="{Binding Reports}">
                     <TreeView.ItemContainerStyle>
@@ -161,10 +163,36 @@
                     </TreeView.ItemContainerStyle>
                     <TreeView.Resources>
                         <HierarchicalDataTemplate DataType="{x:Type vm:ReportViewModel}" ItemsSource="{Binding Pages}">
-                            <TextBlock Text="{Binding Name}" />
+                            <Grid>
+                                <Grid.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="Rename" Click="ReportsTreeRename_Click" />
+                                    </ContextMenu>
+                                </Grid.ContextMenu>
+                                <TextBlock Text="{Binding Name}"
+                                           Visibility="{Binding IsEditing, Converter={StaticResource InverseBoolToVisibility}}" />
+                                <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                                         IsVisibleChanged="ReportsTreeRename_IsVisibleChanged"
+                                         KeyDown="ReportsTreeRename_KeyDown"
+                                         LostFocus="ReportsTreeRename_LostFocus"
+                                         Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}" />
+                            </Grid>
                         </HierarchicalDataTemplate>
                         <DataTemplate DataType="{x:Type vm:PageViewModel}">
-                            <TextBlock Text="{Binding Name}" />
+                            <Grid>
+                                <Grid.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="Rename" Click="ReportsTreeRename_Click" />
+                                    </ContextMenu>
+                                </Grid.ContextMenu>
+                                <TextBlock Text="{Binding Name}"
+                                           Visibility="{Binding IsEditing, Converter={StaticResource InverseBoolToVisibility}}" />
+                                <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                                         IsVisibleChanged="ReportsTreeRename_IsVisibleChanged"
+                                         KeyDown="ReportsTreeRename_KeyDown"
+                                         LostFocus="ReportsTreeRename_LostFocus"
+                                         Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}" />
+                            </Grid>
                         </DataTemplate>
                     </TreeView.Resources>
                 </TreeView>

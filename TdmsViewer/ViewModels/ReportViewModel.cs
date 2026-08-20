@@ -170,6 +170,9 @@ public sealed partial class PageViewModel : ObservableObject
     private string _name;
 
     [ObservableProperty]
+    private bool _isEditing;
+
+    [ObservableProperty]
     private bool _isSelected;
 
     [ObservableProperty]
@@ -277,6 +280,9 @@ public sealed partial class ReportViewModel : ObservableObject
 {
     [ObservableProperty]
     private string _name;
+
+    [ObservableProperty]
+    private bool _isEditing;
 
     [ObservableProperty]
     private bool _isSelected;
