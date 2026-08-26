@@ -237,10 +237,15 @@
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
                     <DockPanel Grid.Column="0">
-                        <TextBlock DockPanel.Dock="Top" Text="SERIES ON THIS GRAPH" Style="{StaticResource SectionHeader}" />
-                    <DataGrid ItemsSource="{Binding SelectedPage.Series}" AutoGenerateColumns="False"
+                        <DockPanel DockPanel.Dock="Top" LastChildFill="False">
+                            <TextBlock DockPanel.Dock="Left" Text="SERIES ON THIS GRAPH" Style="{StaticResource SectionHeader}" />
+                            <Button DockPanel.Dock="Right" Content="Remove selected" Style="{StaticResource SubtleButton}"
+                                    Padding="10,3" Margin="0,0,0,4" Click="RemoveSelectedSeries_Click"
+                                    ToolTip="Remove all selected rows from this graph" />
+                        </DockPanel>
+                    <DataGrid x:Name="SeriesGrid" ItemsSource="{Binding SelectedPage.Series}" AutoGenerateColumns="False"
                               CanUserAddRows="False" HeadersVisibility="Column" GridLinesVisibility="Horizontal"
-                              SelectionMode="Single">
+                              SelectionMode="Extended">
                         <DataGrid.RowStyle>
                             <Style TargetType="DataGridRow">
                                 <EventSetter Event="MouseEnter" Handler="SeriesRow_MouseEnter" />
@@ -511,8 +516,10 @@
                     <TextBox Text="{Binding ChannelFilter, UpdateSourceTrigger=PropertyChanged}"
                              ToolTip="Search groups and channels. Multiple words all must match (e.g. 'AFE voltage')." />
                     <TextBlock Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,4,0,0"
-                               Text="Tick a channel to add it (or double-click / drag)." />
+                               Text="Tick one or more channels, then click Add selected to graph (or double-click / drag one)." />
                     <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                        <Button Content="Add selected to graph" Style="{StaticResource AccentButton}" Padding="10,3" Margin="0,0,6,0"
+                            Command="{Binding AddSelectedCommand}" ToolTip="Add all checked channels to the current graph" />
                         <Button Content="Expand all" Style="{StaticResource SubtleButton}" Padding="10,3" Margin="0,0,6,0"
                                 Command="{Binding ExpandAllCommand}" ToolTip="Expand all groups" />
                         <Button Content="Collapse all" Style="{StaticResource SubtleButton}" Padding="10,3"
@@ -568,7 +575,7 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0" Orientation="Horizontal">
-                                        <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                        <CheckBox IsChecked="{Binding IsPicked, Mode=TwoWay}"
                                                   Focusable="False"
                                                   Visibility="{Binding IsGroup, Converter={StaticResource InverseBoolToVisibility}}"
                                                   VerticalAlignment="Center" Margin="0,0,4,0" />

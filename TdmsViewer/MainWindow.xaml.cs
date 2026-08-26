@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Diagnostics;
 using Microsoft.Win32;
 using ScottPlot;
 using TdmsViewer.Models;
@@ -584,6 +585,15 @@ public partial class MainWindow : Window
         ApplyHover(null);
     }
 
+    private void RemoveSelectedSeries_Click(object sender, RoutedEventArgs e)
+    {
+        var selected = SeriesGrid.SelectedItems.OfType<SeriesViewModel>().ToList();
+        if (selected.Count == 0) return;
+
+        foreach (var series in selected)
+            _vm.DeleteSelectedSeriesCommand.Execute(series);
+    }
+
     // Thickens the hovered series' line (and restores any previously hovered one) without a full re-render.
     private void ApplyHover(SeriesViewModel? series)
     {
@@ -673,23 +683,35 @@ public partial class MainWindow : Window
         if (p.Y < top - 4 || p.Y > bottom + 4) return (null, false);
 
         AxisSide side;
-        bool titleArea;
+        double sideBandWidth;
+        double offsetFromPlot;
         if (p.X < left)
         {
             side = AxisSide.Left;
-            titleArea = p.X < left * 0.5;
+            sideBandWidth = Math.Max(left, 1);
+            offsetFromPlot = left - p.X;
         }
         else if (p.X > right)
         {
             side = AxisSide.Right;
-            titleArea = p.X > right + (WpfPlot.ActualWidth - right) * 0.5;
+            sideBandWidth = Math.Max(WpfPlot.ActualWidth - right, 1);
+            offsetFromPlot = p.X - right;
         }
         else
         {
             return (null, false);
         }
 
-        return (_renderedScales.FirstOrDefault(s => s.Side == side), titleArea);
+        var sideScales = _renderedScales.Where(s => s.Side == side).ToList();
+        if (sideScales.Count == 0) return (null, false);
+
+        var clampedOffset = Math.Clamp(offsetFromPlot, 0, Math.Max(0, sideBandWidth - 0.0001));
+        var sliceWidth = sideBandWidth / sideScales.Count;
+        var index = Math.Min(sideScales.Count - 1, (int)(clampedOffset / sliceWidth));
+        var local = (clampedOffset - (index * sliceWidth)) / sliceWidth;
+        var titleArea = local > 0.5;
+
+        return (sideScales[index], titleArea);
     }
 
     // Right-click on a Y axis opens a menu to edit/move/add/delete that scale.
@@ -707,6 +729,14 @@ public partial class MainWindow : Window
 
         if (scale is not null)
         {
+            menu.Items.Add(new MenuItem
+            {
+                Header = $"Y-scale: {scale.Name}",
+                IsEnabled = false,
+                FontStyle = FontStyles.Italic,
+            });
+            menu.Items.Add(new Separator());
+
             menu.Items.Add(Item("Scale settings\u2026", () => new ScaleEditorWindow(scale, true) { Owner = this }.ShowDialog()));
             menu.Items.Add(Item("Set min / max\u2026", () => new ScaleEditorWindow(scale, false) { Owner = this }.ShowDialog()));
 
@@ -1508,6 +1538,16 @@ public partial class MainWindow : Window
             _vm.StatusText = "Downloading update...";
             var progress = new Progress<double>(p => _vm.StatusText = $"Downloading update... {p:P0}");
             var newExe = await _update.DownloadAsync(info.DownloadUrl, progress);
+
+            var downloadedVersion = GetDownloadedVersion(newExe);
+            var currentVersion = NormalizeVersion(current);
+            if (downloadedVersion is null || downloadedVersion <= currentVersion)
+            {
+                throw new InvalidOperationException(
+                    $"Downloaded update is not newer (downloaded: {downloadedVersion?.ToString() ?? "unknown"}, current: {currentVersion}). " +
+                    "The release asset appears stale. Please republish TdmsViewer.exe for this tag.");
+            }
+
             _vm.StatusText = "Installing update...";
             _update.ApplyAndRestart(newExe);
         }
@@ -1518,6 +1558,25 @@ public partial class MainWindow : Window
                 $"Update failed.\n{ex.Message}\n\nYou can download it manually from the releases page.",
                 "Update", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
+    }
+
+    private static System.Version NormalizeVersion(System.Version version) =>
+        new(version.Major, version.Minor, Math.Max(version.Build, 0));
+
+    private static System.Version? GetDownloadedVersion(string exePath)
+    {
+        var fileVersion = FileVersionInfo.GetVersionInfo(exePath).FileVersion;
+        if (string.IsNullOrWhiteSpace(fileVersion))
+            return null;
+
+        var plus = fileVersion.IndexOf('+');
+        if (plus >= 0)
+            fileVersion = fileVersion[..plus];
+
+        if (!System.Version.TryParse(fileVersion, out var parsed))
+            return null;
+
+        return NormalizeVersion(parsed);
     }
 
     private void PrintPdf_Executed(object sender, ExecutedRoutedEventArgs e)

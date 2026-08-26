@@ -721,13 +721,27 @@ public sealed partial class MainViewModel : ObservableObject
     {
         if (SelectedPage is null) return;
 
+        var picked = ChannelTree
+            .SelectMany(g => g.Children)
+            .Where(c => c.IsPicked && c.Channel is not null)
+            .ToList();
+        if (picked.Count == 0) return;
+
         var wasEmpty = SelectedPage.Series.Count == 0;
-        foreach (var leaf in ChannelTree.SelectMany(g => g.Children).Where(c => c.IsSelected && c.Channel is not null))
+        var addedAny = false;
+        foreach (var leaf in picked)
         {
-            AddSeriesFor(leaf.Channel!);
-            leaf.IsSelected = false;
+            var info = leaf.Channel!;
+            if (!SelectedPage.Series.Any(s => SeriesMatches(s, info)))
+            {
+                AddSeriesFor(info);
+                addedAny = true;
+            }
+            leaf.IsPicked = false;
         }
-        RaisePlotAfterAdd(wasEmpty);
+
+        if (addedAny)
+            RaisePlotAfterAdd(wasEmpty);
     }
 
     /// <summary>Adds a single channel to the active page (used by double-click).</summary>
