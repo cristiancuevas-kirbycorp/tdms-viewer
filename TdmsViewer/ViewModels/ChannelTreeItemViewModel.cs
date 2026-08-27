@@ -8,9 +8,6 @@ namespace TdmsViewer.ViewModels;
 public sealed partial class ChannelTreeItemViewModel : ObservableObject
 {
     [ObservableProperty]
-    private bool _isPicked;
-
-    [ObservableProperty]
     private bool _isSelected;
 
     [ObservableProperty]

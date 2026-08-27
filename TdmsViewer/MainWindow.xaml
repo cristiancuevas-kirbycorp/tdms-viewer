@@ -516,13 +516,11 @@
                     <TextBox Text="{Binding ChannelFilter, UpdateSourceTrigger=PropertyChanged}"
                              ToolTip="Search groups and channels. Multiple words all must match (e.g. 'AFE voltage')." />
                     <TextBlock Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,4,0,0"
-                               Text="Tick one or more channels, then click Add selected to graph (or double-click / drag one)." />
+                               Text="Tick a channel to add it (or double-click / drag)." />
                     <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
-                        <Button Content="Add selected to graph" Style="{StaticResource AccentButton}" Padding="10,3" Margin="0,0,6,0"
-                            Command="{Binding AddSelectedCommand}" ToolTip="Add all checked channels to the current graph" />
-                        <Button Content="Expand all" Style="{StaticResource SubtleButton}" Padding="10,3" Margin="0,0,6,0"
+                        <Button Style="{StaticResource IconButton}" Content="&#xE71E;" Margin="0,0,4,0"
                                 Command="{Binding ExpandAllCommand}" ToolTip="Expand all groups" />
-                        <Button Content="Collapse all" Style="{StaticResource SubtleButton}" Padding="10,3"
+                        <Button Style="{StaticResource IconButton}" Content="&#xE71D;"
                                 Command="{Binding CollapseAllCommand}" ToolTip="Collapse all groups" />
                     </StackPanel>
                 </StackPanel>
@@ -575,7 +573,7 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0" Orientation="Horizontal">
-                                        <CheckBox IsChecked="{Binding IsPicked, Mode=TwoWay}"
+                                        <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}"
                                                   Focusable="False"
                                                   Visibility="{Binding IsGroup, Converter={StaticResource InverseBoolToVisibility}}"
                                                   VerticalAlignment="Center" Margin="0,0,4,0" />
