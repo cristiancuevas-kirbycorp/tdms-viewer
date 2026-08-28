@@ -981,5 +981,13 @@ public sealed partial class MainViewModel : ObservableObject
         return _tdms.LoadChannel(series.Group, series.Channel);
     }
 
+    /// <summary>Gets the unit for a series (empty string for formulas).</summary>
+    public string GetSeriesUnit(PlotSeriesModel series)
+    {
+        if (series.IsFormula) return string.Empty;
+        var channel = _allChannels.FirstOrDefault(c => c.Group == series.Group && c.Name == series.Channel);
+        return channel?.Unit ?? string.Empty;
+    }
+
     private string NextColor() => Palette[_colorIndex++ % Palette.Length];
 }

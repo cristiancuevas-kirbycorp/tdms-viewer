@@ -224,15 +224,10 @@
                                       Checked="BoxZoom_Checked" Unchecked="BoxZoom_Unchecked"
                                       ToolTip="Box zoom: drag a rectangle to zoom into it" />
                         <ToggleButton x:Name="CursorToggle" Style="{StaticResource IconToggleButton}" FontFamily="Segoe UI"
-                                      Content="Cursors" Checked="Cursors_Checked" Unchecked="Cursors_Unchecked"
+                                      Content="Show Cursors" Checked="Cursors_Checked" Unchecked="Cursors_Unchecked"
                                       ToolTip="Show two draggable time cursors with a value readout" />
                         <Button Style="{StaticResource IconButton}" Content="&#xE713;" Click="CursorConfig_Click"
                                 ToolTip="Configure cursor calculations" />
-                        <ToggleButton x:Name="HoverLegendToggle" Style="{StaticResource IconToggleButton}" FontFamily="Segoe UI"
-                                      IsChecked="{Binding SelectedPage.HoverLegendEnabled, FallbackValue=False, TargetNullValue=False}"
-                                      Checked="HoverLegendToggle_Checked" Unchecked="HoverLegendToggle_Unchecked"
-                                      Content="Legend"
-                                      ToolTip="Show values at cursor position (hover legend)" />
                         <Rectangle Style="{StaticResource ToolSeparator}" />
                         <TextBlock VerticalAlignment="Center" Foreground="{StaticResource MutedBrush}" FontSize="11"
                                    Text="Scroll / Left-drag = time (X) · Box Zoom for a region · buttons rescale Y" />

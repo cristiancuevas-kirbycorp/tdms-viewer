@@ -33,7 +33,7 @@ public partial class MainWindow : Window
     private readonly List<ScottPlot.Plottables.VerticalLine> _cursorLines = new();
     private ScottPlot.Plottables.HorizontalSpan? _cursorBand;
     private int _draggingCursor = -1;
-    private readonly List<(string Name, double[] X, double[] Y, string ColorHex, bool Dt)> _rendered = new();
+    private readonly List<(string Name, double[] X, double[] Y, string ColorHex, bool Dt, string Unit)> _rendered = new();
     // Maps a series row to a setter for its plotted line width plus the width to restore on mouse-leave.
     private readonly Dictionary<SeriesViewModel, (Action<float> SetWidth, float BaseWidth)> _seriesLines = new();
     private SeriesViewModel? _hoveredSeries;
@@ -416,7 +416,8 @@ public partial class MainWindow : Window
 
                     AddSeries(plot, series, data, axis, _seriesLines);
                     anyDateTime |= data.XIsDateTime;
-                    _rendered.Add((series.DisplayName, data.X, data.Y, series.ColorHex, data.XIsDateTime));
+                    var unit = _vm.GetSeriesUnit(series.Model);
+                    _rendered.Add((series.DisplayName, data.X, data.Y, series.ColorHex, data.XIsDateTime, unit));
 
                     var (xLo, xHi, xHas) = FiniteExtent(data.X);
                     if (xHas) { xMin = Math.Min(xMin, xLo); xMax = Math.Max(xMax, xHi); }
@@ -940,6 +941,7 @@ public partial class MainWindow : Window
                 _cursorBand.X2 = Math.Max(_cursorX[0], _cursorX[1]);
             }
             UpdateCursorReadout();
+            WpfPlot.Cursor = Cursors.SizeWE;  // Show grab cursor while dragging
             WpfPlot.Refresh();
             return;
         }
@@ -955,11 +957,15 @@ public partial class MainWindow : Window
                 var perPixel = Math.Abs(
                     plot.GetCoordinates(new Pixel((float)((p.X + 1) * dpi.DpiScaleX), (float)(p.Y * dpi.DpiScaleY))).X - dataX);
                 var tol = perPixel * 10;  // Increased tolerance to match click detection
-                WpfPlot.Cursor = _cursorX.Any(cx => Math.Abs(cx - dataX) <= tol) ? Cursors.SizeWE : Cursors.Arrow;
+                WpfPlot.Cursor = _cursorX.Any(cx => Math.Abs(cx - dataX) <= tol) ? Cursors.SizeWE : Cursors.Hand;
+            }
+            else
+            {
+                // Show hand cursor when hovering over plot (indicate you can drag left/right to pan)
+                WpfPlot.Cursor = Cursors.Hand;
             }
 
-            // Update hover legend if enabled (show on hover only)
-            if (_vm.SelectedPage?.HoverLegendEnabled == true)
+            // Always show hover legend (no longer checking HoverLegendEnabled)
             {
                 var dpi = VisualTreeHelper.GetDpi(WpfPlot);
                 var p = e.GetPosition(WpfPlot);
@@ -967,10 +973,11 @@ public partial class MainWindow : Window
                 _hoverLegendX = dataX;
                 UpdateHoverLegend();
                 
-                // Better positioning logic to keep tooltip visible
+                // Better positioning logic with DPI-aware calculations
+                // Measure actual panel dimensions instead of using constants
+                var panelWidth = HoverLegendPanel.ActualWidth > 0 ? HoverLegendPanel.ActualWidth : 300;
+                var panelHeight = HoverLegendPanel.ActualHeight > 0 ? HoverLegendPanel.ActualHeight : 250;
                 const double margin = 10;
-                const double panelWidth = 300;  // Estimated panel width
-                const double panelHeight = 250;  // Estimated panel height
                 
                 double panelX = p.X + margin;
                 double panelY = p.Y - panelHeight - margin;  // Try above cursor first
@@ -1002,6 +1009,7 @@ public partial class MainWindow : Window
         var dx = e.GetPosition(WpfPlot).X - _panStartPixel.X;
         var shift = -dx * _panDataPerPixel;
         plot.Axes.SetLimitsX(_panStartLimits.Left + shift, _panStartLimits.Right + shift);
+        WpfPlot.Cursor = Cursors.ScrollWE;  // Show panning cursor
         WpfPlot.Refresh();
     }
 
@@ -1010,12 +1018,7 @@ public partial class MainWindow : Window
         // Hide hover legend when mouse leaves the plot
         HoverLegendPanel.Visibility = Visibility.Collapsed;
         RemoveHoverPointMarkers();
-        // Restore the normal legend when hover legend hides
-        if (_vm.SelectedPage?.HoverLegendEnabled == true)
-        {
-            WpfPlot.Plot.Legend.IsVisible = true;
-            GraphLegend.Visibility = Visibility.Visible;
-        }
+        WpfPlot.Cursor = Cursors.Arrow;
         WpfPlot.Refresh();
     }
 
@@ -1025,7 +1028,7 @@ public partial class MainWindow : Window
         double nearest = targetX;
         double minDistance = double.MaxValue;
 
-        foreach (var (_, xArray, _, _, _) in _rendered)
+        foreach (var (_, xArray, _, _, _, _) in _rendered)
         {
             for (int i = 0; i < xArray.Length; i++)
             {
@@ -1103,29 +1106,6 @@ public partial class MainWindow : Window
             page.Model.CursorsOn = false;
             _vm.ScheduleAutoSave();
         }
-        WpfPlot.Refresh();
-    }
-
-    private void HoverLegendToggle_Checked(object sender, RoutedEventArgs e)
-    {
-        if (_vm.SelectedPage is { } page)
-        {
-            page.HoverLegendEnabled = true;
-            page.Model.HoverLegendEnabled = true;
-            _vm.ScheduleAutoSave();
-        }
-    }
-
-    private void HoverLegendToggle_Unchecked(object sender, RoutedEventArgs e)
-    {
-        if (_vm.SelectedPage is { } page)
-        {
-            page.HoverLegendEnabled = false;
-            page.Model.HoverLegendEnabled = false;
-            _vm.ScheduleAutoSave();
-        }
-        HoverLegendPanel.Visibility = Visibility.Collapsed;
-        RemoveHoverPointMarkers();
         WpfPlot.Refresh();
     }
 
@@ -1282,7 +1262,7 @@ public partial class MainWindow : Window
             _cursorLines.Add(vl);
             
             // Add dots at the cursor snap points on each axis
-            foreach (var (name, xs, ys, colorHex, _) in _rendered)
+            foreach (var (name, xs, ys, colorHex, _, _) in _rendered)
             {
                 var (index, ok) = NearestIndex(xs, _cursorX[i]);
                 if (ok && double.IsFinite(ys[index]))
@@ -1320,7 +1300,7 @@ public partial class MainWindow : Window
         var dx = _cursorX[1] - _cursorX[0];
 
         var rows = new List<CursorRow>();
-        foreach (var (name, xs, ys, colorHex, _) in _rendered)
+        foreach (var (name, xs, ys, colorHex, _, _) in _rendered)
         {
             var (ia, okA) = NearestIndex(xs, _cursorX[0]);
             var (ib, okB) = NearestIndex(xs, _cursorX[1]);
@@ -1377,7 +1357,7 @@ public partial class MainWindow : Window
         {
             try
             {
-                var (name, xs, ys, colorHex, _) = _rendered[0];
+                var (name, xs, ys, colorHex, _, _) = _rendered[0];
                 var (index, ok) = NearestIndex(xs, _hoverLegendX);
                 if (ok && double.IsFinite(ys[index]))
                 {
@@ -1411,7 +1391,7 @@ public partial class MainWindow : Window
             HoverLegendReadout.Children.Add(grid);
         }
 
-        foreach (var (name, xs, ys, colorHex, dt) in _rendered)
+        foreach (var (name, xs, ys, colorHex, dt, unit) in _rendered)
         {
             var (index, ok) = NearestIndex(xs, _hoverLegendX);
             var value = ok ? ys[index] : double.NaN;
@@ -1451,7 +1431,7 @@ public partial class MainWindow : Window
             var grid = new Grid { Margin = new Thickness(0, 0, 0, 2) };  // More compact
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(200) });  // Fixed width for alignment
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(60) });  // Smaller value column
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });  // Value + unit auto-width
 
             var swatch = new Border
             {
@@ -1471,9 +1451,14 @@ public partial class MainWindow : Window
             Grid.SetColumn(nameBlock, 1);
             grid.Children.Add(nameBlock);
 
+            // Format value with unit if available
+            var valueText = double.IsFinite(value) ? Fmt(value) : "\u2014";
+            if (!string.IsNullOrEmpty(unit))
+                valueText = $"{valueText} {unit}";
+
             var valueBlock = new TextBlock
             {
-                Text = double.IsFinite(value) ? Fmt(value) : "\u2014",
+                Text = valueText,
                 HorizontalAlignment = System.Windows.HorizontalAlignment.Right,
                 Margin = new Thickness(4, 0, 0, 0),
             };
