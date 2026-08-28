@@ -972,6 +972,7 @@ public partial class MainWindow : Window
                 
                 // Hide the normal legend when hover legend is active
                 plot.Legend.IsVisible = false;
+                GraphLegend.Visibility = Visibility.Collapsed;
                 
                 WpfPlot.Refresh();
             }
@@ -993,6 +994,7 @@ public partial class MainWindow : Window
         if (_vm.SelectedPage?.HoverLegendEnabled == true)
         {
             WpfPlot.Plot.Legend.IsVisible = true;
+            GraphLegend.Visibility = Visibility.Visible;
         }
         WpfPlot.Refresh();
     }
@@ -1251,6 +1253,35 @@ public partial class MainWindow : Window
             vl.LabelStyle.Bold = true;
             vl.LabelStyle.FontSize = 14;
             _cursorLines.Add(vl);
+            
+            // Add dots at the cursor snap points on each axis
+            foreach (var (name, xs, ys, colorHex, _) in _rendered)
+            {
+                var (index, ok) = NearestIndex(xs, _cursorX[i]);
+                if (ok && double.IsFinite(ys[index]))
+                {
+                    try
+                    {
+                        var series = _vm.SelectedPage?.Series.FirstOrDefault(s => s.DisplayName == name);
+                        var targetAxis = series is not null
+                            ? plot.Axes.GetAxes().OfType<IYAxis>().FirstOrDefault(a => a.Label.Text == 
+                                _vm.SelectedPage?.Axes.FirstOrDefault(ax => ax.Id == series.AxisId)?.Name)
+                            : null;
+                        
+                        if (targetAxis is not null)
+                        {
+                            var color = HexToScottPlotColor(colorHex);
+                            var scatter = plot.Add.Scatter(new double[] { xs[index] }, new double[] { ys[index] });
+                            scatter.Color = color;
+                            scatter.MarkerSize = 8;
+                            scatter.LineWidth = 0;
+                            scatter.Axes.YAxis = targetAxis;
+                            _hoverPointMarkers.Add(scatter);
+                        }
+                    }
+                    catch { }
+                }
+            }
         }
         UpdateCursorReadout();
     }
@@ -1314,7 +1345,27 @@ public partial class MainWindow : Window
         }
         catch { /* Skip line if there's an issue */ }
 
-        foreach (var (name, xs, ys, colorHex, _) in _rendered)
+        // Add timestamp if DateTime axis
+        if (_rendered.Any(r => r.Dt))
+        {
+            var muted = (Brush)FindResource("MutedBrush");
+            var grid = new Grid { Margin = new Thickness(0, 1, 0, 1) };
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            
+            var tsBlock = new TextBlock
+            {
+                Text = double.IsFinite(_hoverLegendX) 
+                    ? DateTime.FromOADate(_hoverLegendX).ToString("yyyy-MM-dd HH:mm:ss.fff")
+                    : "—",
+                Foreground = muted,
+                FontSize = 10,
+                Margin = new Thickness(4, 0, 0, 0)
+            };
+            grid.Children.Add(tsBlock);
+            HoverLegendReadout.Children.Add(grid);
+        }
+
+        foreach (var (name, xs, ys, colorHex, dt) in _rendered)
         {
             var (index, ok) = NearestIndex(xs, _hoverLegendX);
             var value = ok ? ys[index] : double.NaN;
@@ -1354,7 +1405,7 @@ public partial class MainWindow : Window
             var grid = new Grid { Margin = new Thickness(0, 1, 0, 1) };
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(14) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });  // Auto-size for full name
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(80) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(65) });  // Reduced from 80
 
             var swatch = new Border
             {
@@ -1454,9 +1505,9 @@ public partial class MainWindow : Window
         var muted = (Brush)FindResource("MutedBrush");
         var grid = new Grid { Margin = new Thickness(0, isHeader ? 0 : 1, 0, isHeader ? 3 : 1) };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(14) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(150) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });  // Auto-size for full names
         foreach (var _ in cols)
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(70) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(55) });  // Reduced from 70
 
         if (!isHeader && colorHex is not null)
         {
@@ -1472,8 +1523,9 @@ public partial class MainWindow : Window
 
         var nameBlock = new TextBlock
         {
-            Text = name, TextTrimming = TextTrimming.CharacterEllipsis, ToolTip = name,
-            Margin = new Thickness(4, 0, 0, 0),
+            Text = name, TextTrimming = TextTrimming.None, ToolTip = name,
+            Margin = new Thickness(4, 0, 6, 0),
+            TextWrapping = TextWrapping.Wrap
         };
         if (isHeader) { nameBlock.FontWeight = FontWeights.SemiBold; nameBlock.Foreground = muted; }
         Grid.SetColumn(nameBlock, 1);
@@ -1485,7 +1537,7 @@ public partial class MainWindow : Window
             {
                 Text = value(cols[i]),
                 HorizontalAlignment = System.Windows.HorizontalAlignment.Right,
-                Margin = new Thickness(4, 0, 0, 0),
+                Margin = new Thickness(2, 0, 0, 0),
             };
             if (isHeader) { cell.FontWeight = FontWeights.SemiBold; cell.Foreground = muted; }
             else if (cols[i].Key == "Delta") cell.Foreground = muted;
@@ -1970,7 +2022,7 @@ public partial class MainWindow : Window
             {
                 plot.ShowLegend();
                 plot.Legend.Alignment = PrintLegendAlignment(page);
-                plot.Legend.FontSize = 16;
+                plot.Legend.FontSize = 20;  // Increased from 16 for better visibility
             }
 
             // Cursors, if the page has them on.
