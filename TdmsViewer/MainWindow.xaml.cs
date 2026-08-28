@@ -958,6 +958,9 @@ public partial class MainWindow : Window
                 var dataX = plot.GetCoordinates(new Pixel((float)(p.X * dpi.DpiScaleX), (float)(p.Y * dpi.DpiScaleY))).X;
                 _hoverLegendX = dataX;
                 UpdateHoverLegend();
+                
+                // Position panel near cursor (offset to follow mouse)
+                HoverLegendPanel.Margin = new Thickness(p.X + 10, p.Y + 10, 0, 0);
                 HoverLegendPanel.Visibility = Visibility.Visible;
                 WpfPlot.Refresh();
             }
@@ -1280,17 +1283,32 @@ public partial class MainWindow : Window
         HoverLegendReadout.Children.Clear();
         RemoveHoverPointMarkers();
         
-        if (double.IsNaN(_hoverLegendX) || _rendered.Count == 0) return;
+        if (double.IsNaN(_hoverLegendX) || _rendered.Count == 0 || _vm.SelectedPage is null) return;
 
         var plot = WpfPlot.Plot;
+        var page = _vm.SelectedPage;
 
         foreach (var (name, xs, ys, colorHex, _) in _rendered)
         {
             var (index, ok) = NearestIndex(xs, _hoverLegendX);
             var value = ok ? ys[index] : double.NaN;
             
-            // Add a highlight dot on the data point
-            if (ok && double.IsFinite(ys[index]))
+            // Find the series in the page to get its axis
+            var series = page.Series.FirstOrDefault(s => s.DisplayName == name);
+            IYAxis? targetAxis = null;
+            
+            if (series is not null)
+            {
+                var axisModel = page.Axes.FirstOrDefault(a => a.Id == series.AxisId);
+                if (axisModel is not null)
+                {
+                    // Find the corresponding IYAxis by matching the axis label
+                    targetAxis = FindAxisByLabel(plot, axisModel.Name);
+                }
+            }
+            
+            // Add a highlight dot on the data point on the correct axis
+            if (ok && double.IsFinite(ys[index]) && targetAxis is not null)
             {
                 try
                 {
@@ -1299,6 +1317,7 @@ public partial class MainWindow : Window
                     scatter.Color = color;
                     scatter.MarkerSize = 10;  // Large marker to highlight the point
                     scatter.LineWidth = 0;    // No line, just marker
+                    scatter.Axes.YAxis = targetAxis;  // Add to the correct Y-axis
                     _hoverPointMarkers.Add(scatter);
                 }
                 catch { /* Skip marker if there's an issue */ }
@@ -1339,6 +1358,21 @@ public partial class MainWindow : Window
 
             HoverLegendReadout.Children.Add(grid);
         }
+    }
+
+    private IYAxis? FindAxisByLabel(Plot plot, string label)
+    {
+        // Check all axes - Left, Right, and any custom axes
+        var allAxes = plot.Axes.GetAxes();
+        
+        foreach (var axis in allAxes)
+        {
+            if (axis is IYAxis yAxis && yAxis.Label.Text == label)
+                return yAxis;
+        }
+        
+        // Fallback: return left axis if no match
+        return plot.Axes.Left;
     }
 
     private void RemoveHoverPointMarkers()
