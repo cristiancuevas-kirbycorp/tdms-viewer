@@ -330,6 +330,7 @@
                                 MouseLeftButtonDown="Plot_MouseLeftButtonDown"
                                 MouseMove="Plot_MouseMove"
                                 MouseLeftButtonUp="Plot_MouseLeftButtonUp"
+                                MouseLeave="Plot_MouseLeave"
                                 MouseRightButtonUp="Plot_MouseRightButtonUp" />
                     <Canvas x:Name="ZoomOverlay" Background="#01FFFFFF" IsHitTestVisible="False"
                             MouseLeftButtonDown="ZoomOverlay_MouseLeftButtonDown"

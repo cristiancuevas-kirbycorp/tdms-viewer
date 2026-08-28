@@ -44,6 +44,7 @@ public partial class MainWindow : Window
     private bool _restoringCursors;
     private CursorCalcSettings _calcs = CursorCalcSettings.Load();
     private double _hoverLegendX = double.NaN;  // Current hover position on the plot
+    private readonly List<ScottPlot.Plottables.Scatter> _hoverPointMarkers = new();  // Highlight dots on hovered data points
 
     // Axis tick-label sizes (print is higher-resolution so it needs a larger value).
     private const float AxisTickFontSize = 15f;
@@ -136,6 +137,8 @@ public partial class MainWindow : Window
     private void ReportsTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
         HoverLegendPanel.Visibility = Visibility.Collapsed;
+        RemoveHoverPointMarkers();
+        _hoverLegendX = double.NaN;
         switch (e.NewValue)
         {
             case ReportViewModel report:
@@ -947,7 +950,7 @@ public partial class MainWindow : Window
                 WpfPlot.Cursor = _cursorX.Any(cx => Math.Abs(cx - dataX) <= tol) ? Cursors.SizeWE : Cursors.Arrow;
             }
 
-            // Update hover legend if enabled
+            // Update hover legend if enabled (show on hover only)
             if (_vm.SelectedPage?.HoverLegendEnabled == true)
             {
                 var dpi = VisualTreeHelper.GetDpi(WpfPlot);
@@ -956,10 +959,7 @@ public partial class MainWindow : Window
                 _hoverLegendX = dataX;
                 UpdateHoverLegend();
                 HoverLegendPanel.Visibility = Visibility.Visible;
-            }
-            else
-            {
-                HoverLegendPanel.Visibility = Visibility.Collapsed;
+                WpfPlot.Refresh();
             }
             return;
         }
@@ -967,6 +967,14 @@ public partial class MainWindow : Window
         var dx = e.GetPosition(WpfPlot).X - _panStartPixel.X;
         var shift = -dx * _panDataPerPixel;
         plot.Axes.SetLimitsX(_panStartLimits.Left + shift, _panStartLimits.Right + shift);
+        WpfPlot.Refresh();
+    }
+
+    private void Plot_MouseLeave(object sender, MouseEventArgs e)
+    {
+        // Hide hover legend when mouse leaves the plot
+        HoverLegendPanel.Visibility = Visibility.Collapsed;
+        RemoveHoverPointMarkers();
         WpfPlot.Refresh();
     }
 
@@ -1065,8 +1073,6 @@ public partial class MainWindow : Window
             page.Model.HoverLegendEnabled = true;
             _vm.ScheduleAutoSave();
         }
-        UpdateHoverLegend();
-        HoverLegendPanel.Visibility = Visibility.Visible;
     }
 
     private void HoverLegendToggle_Unchecked(object sender, RoutedEventArgs e)
@@ -1078,6 +1084,8 @@ public partial class MainWindow : Window
             _vm.ScheduleAutoSave();
         }
         HoverLegendPanel.Visibility = Visibility.Collapsed;
+        RemoveHoverPointMarkers();
+        WpfPlot.Refresh();
     }
 
     // Applies the saved cursor state for a page after a render (called from UpdatePlotOverlays).
@@ -1270,13 +1278,33 @@ public partial class MainWindow : Window
     private void UpdateHoverLegend()
     {
         HoverLegendReadout.Children.Clear();
+        RemoveHoverPointMarkers();
+        
         if (double.IsNaN(_hoverLegendX) || _rendered.Count == 0) return;
+
+        var plot = WpfPlot.Plot;
 
         foreach (var (name, xs, ys, colorHex, _) in _rendered)
         {
             var (index, ok) = NearestIndex(xs, _hoverLegendX);
             var value = ok ? ys[index] : double.NaN;
             
+            // Add a highlight dot on the data point
+            if (ok && double.IsFinite(ys[index]))
+            {
+                try
+                {
+                    var color = HexToScottPlotColor(colorHex);
+                    var scatter = plot.Add.Scatter(new double[] { xs[index] }, new double[] { ys[index] });
+                    scatter.Color = color;
+                    scatter.MarkerSize = 10;  // Large marker to highlight the point
+                    scatter.LineWidth = 0;    // No line, just marker
+                    _hoverPointMarkers.Add(scatter);
+                }
+                catch { /* Skip marker if there's an issue */ }
+            }
+            
+            // Build the legend entry
             var muted = (Brush)FindResource("MutedBrush");
             var grid = new Grid { Margin = new Thickness(0, 1, 0, 1) };
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(14) });
@@ -1310,6 +1338,32 @@ public partial class MainWindow : Window
             grid.Children.Add(valueBlock);
 
             HoverLegendReadout.Children.Add(grid);
+        }
+    }
+
+    private void RemoveHoverPointMarkers()
+    {
+        var plot = WpfPlot.Plot;
+        foreach (var marker in _hoverPointMarkers)
+        {
+            try { plot.Remove(marker); } catch { }
+        }
+        _hoverPointMarkers.Clear();
+    }
+
+    private ScottPlot.Color HexToScottPlotColor(string hex)
+    {
+        try
+        {
+            var s = hex.StartsWith('#') ? hex.Substring(1) : hex;
+            var r = byte.Parse(s.Substring(0, 2), System.Globalization.NumberStyles.HexNumber);
+            var g = byte.Parse(s.Substring(2, 2), System.Globalization.NumberStyles.HexNumber);
+            var b = byte.Parse(s.Substring(4, 2), System.Globalization.NumberStyles.HexNumber);
+            return new ScottPlot.Color(r, g, b);
+        }
+        catch
+        {
+            return new ScottPlot.Color(127, 127, 127);  // Gray fallback
         }
     }
 
