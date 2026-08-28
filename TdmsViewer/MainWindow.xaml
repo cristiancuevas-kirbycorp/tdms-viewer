@@ -525,8 +525,6 @@
                             <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="220">
                                 <StackPanel x:Name="HoverLegendReadout" />
                             </ScrollViewer>
-                            <TextBlock Text="Shows channel values at the current cursor position. Drag to reposition."
-                                       TextWrapping="Wrap" FontSize="10" Foreground="{StaticResource MutedBrush}" Margin="0,4,0,0" />
                         </StackPanel>
                     </Border>
                 </Grid>

@@ -45,6 +45,7 @@ public partial class MainWindow : Window
     private CursorCalcSettings _calcs = CursorCalcSettings.Load();
     private double _hoverLegendX = double.NaN;  // Current hover position on the plot
     private readonly List<ScottPlot.Plottables.Scatter> _hoverPointMarkers = new();  // Highlight dots on hovered data points
+    private ScottPlot.Plottables.VerticalLine? _hoverCursorLine = null;  // Dotted vertical line at hover position
 
     // Axis tick-label sizes (print is higher-resolution so it needs a larger value).
     private const float AxisTickFontSize = 15f;
@@ -886,7 +887,7 @@ public partial class MainWindow : Window
         {
             var perPixel = Math.Abs(
                 plot.GetCoordinates(new Pixel((float)((p.X + 1) * dpi.DpiScaleX), (float)(p.Y * dpi.DpiScaleY))).X - dataX);
-            var tolerance = perPixel * 6;
+            var tolerance = perPixel * 10;  // Increased tolerance for easier cursor grabbing
             var near = -1;
             var best = double.MaxValue;
             for (var i = 0; i < 2; i++)
@@ -946,7 +947,7 @@ public partial class MainWindow : Window
                 var dataX = plot.GetCoordinates(new Pixel((float)(p.X * dpi.DpiScaleX), (float)(p.Y * dpi.DpiScaleY))).X;
                 var perPixel = Math.Abs(
                     plot.GetCoordinates(new Pixel((float)((p.X + 1) * dpi.DpiScaleX), (float)(p.Y * dpi.DpiScaleY))).X - dataX);
-                var tol = perPixel * 6;
+                var tol = perPixel * 10;  // Increased tolerance to match click detection
                 WpfPlot.Cursor = _cursorX.Any(cx => Math.Abs(cx - dataX) <= tol) ? Cursors.SizeWE : Cursors.Arrow;
             }
 
@@ -959,9 +960,19 @@ public partial class MainWindow : Window
                 _hoverLegendX = dataX;
                 UpdateHoverLegend();
                 
-                // Position panel near cursor (offset to follow mouse)
-                HoverLegendPanel.Margin = new Thickness(p.X + 10, p.Y + 10, 0, 0);
+                // Position panel near cursor with edge detection
+                // Flip to left side if too close to right edge
+                double panelX = p.X + 10;
+                if (panelX + 350 > WpfPlot.ActualWidth)  // ~350px for typical panel width
+                    panelX = p.X - 360;  // Position to the left
+                panelX = Math.Max(5, panelX);  // Don't go off the left edge
+                
+                HoverLegendPanel.Margin = new Thickness(panelX, p.Y + 10, 0, 0);
                 HoverLegendPanel.Visibility = Visibility.Visible;
+                
+                // Hide the normal legend when hover legend is active
+                plot.Legend.IsVisible = false;
+                
                 WpfPlot.Refresh();
             }
             return;
@@ -978,6 +989,11 @@ public partial class MainWindow : Window
         // Hide hover legend when mouse leaves the plot
         HoverLegendPanel.Visibility = Visibility.Collapsed;
         RemoveHoverPointMarkers();
+        // Restore the normal legend when hover legend hides
+        if (_vm.SelectedPage?.HoverLegendEnabled == true)
+        {
+            WpfPlot.Plot.Legend.IsVisible = true;
+        }
         WpfPlot.Refresh();
     }
 
@@ -1288,6 +1304,16 @@ public partial class MainWindow : Window
         var plot = WpfPlot.Plot;
         var page = _vm.SelectedPage;
 
+        // Add a light dotted vertical line at the cursor position
+        try
+        {
+            _hoverCursorLine = plot.Add.VerticalLine(_hoverLegendX);
+            _hoverCursorLine.Color = new ScottPlot.Color(150, 150, 150, 128);  // Light gray, semi-transparent
+            _hoverCursorLine.LineStyle.Pattern = LinePattern.Dotted;
+            _hoverCursorLine.LineWidth = 1;
+        }
+        catch { /* Skip line if there's an issue */ }
+
         foreach (var (name, xs, ys, colorHex, _) in _rendered)
         {
             var (index, ok) = NearestIndex(xs, _hoverLegendX);
@@ -1327,8 +1353,8 @@ public partial class MainWindow : Window
             var muted = (Brush)FindResource("MutedBrush");
             var grid = new Grid { Margin = new Thickness(0, 1, 0, 1) };
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(14) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(150) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(100) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });  // Auto-size for full name
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(80) });
 
             var swatch = new Border
             {
@@ -1341,8 +1367,9 @@ public partial class MainWindow : Window
 
             var nameBlock = new TextBlock
             {
-                Text = name, TextTrimming = TextTrimming.CharacterEllipsis, ToolTip = name,
-                Margin = new Thickness(4, 0, 0, 0),
+                Text = name, TextTrimming = TextTrimming.None, ToolTip = name,
+                Margin = new Thickness(4, 0, 4, 0),
+                MaxWidth = 300  // Prevent tooltip from getting too wide
             };
             Grid.SetColumn(nameBlock, 1);
             grid.Children.Add(nameBlock);
@@ -1383,6 +1410,13 @@ public partial class MainWindow : Window
             try { plot.Remove(marker); } catch { }
         }
         _hoverPointMarkers.Clear();
+        
+        // Remove hover cursor line
+        if (_hoverCursorLine is not null)
+        {
+            try { plot.Remove(_hoverCursorLine); } catch { }
+            _hoverCursorLine = null;
+        }
     }
 
     private ScottPlot.Color HexToScottPlotColor(string hex)
