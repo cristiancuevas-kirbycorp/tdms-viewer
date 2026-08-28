@@ -1057,6 +1057,29 @@ public partial class MainWindow : Window
         WpfPlot.Refresh();
     }
 
+    private void HoverLegendToggle_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_vm.SelectedPage is { } page)
+        {
+            page.HoverLegendEnabled = true;
+            page.Model.HoverLegendEnabled = true;
+            _vm.ScheduleAutoSave();
+        }
+        UpdateHoverLegend();
+        HoverLegendPanel.Visibility = Visibility.Visible;
+    }
+
+    private void HoverLegendToggle_Unchecked(object sender, RoutedEventArgs e)
+    {
+        if (_vm.SelectedPage is { } page)
+        {
+            page.HoverLegendEnabled = false;
+            page.Model.HoverLegendEnabled = false;
+            _vm.ScheduleAutoSave();
+        }
+        HoverLegendPanel.Visibility = Visibility.Collapsed;
+    }
+
     // Applies the saved cursor state for a page after a render (called from UpdatePlotOverlays).
     private void RestoreCursorsForPage(PageViewModel page)
     {
