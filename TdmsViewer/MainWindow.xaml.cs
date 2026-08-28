@@ -43,6 +43,7 @@ public partial class MainWindow : Window
     private Point _dragOffset;
     private bool _restoringCursors;
     private CursorCalcSettings _calcs = CursorCalcSettings.Load();
+    private double _hoverLegendX = double.NaN;  // Current hover position on the plot
 
     // Axis tick-label sizes (print is higher-resolution so it needs a larger value).
     private const float AxisTickFontSize = 15f;
@@ -134,6 +135,7 @@ public partial class MainWindow : Window
 
     private void ReportsTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
+        HoverLegendPanel.Visibility = Visibility.Collapsed;
         switch (e.NewValue)
         {
             case ReportViewModel report:
@@ -184,6 +186,18 @@ public partial class MainWindow : Window
             default:
                 return false;
         }
+    }
+
+    private void DeleteReport_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: MenuItem { DataContext: ReportViewModel report } })
+            _vm.DeleteReportCommand.Execute(report);
+    }
+
+    private void DeletePage_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: MenuItem { DataContext: PageViewModel page } })
+            _vm.DeletePageCommand.Execute(page);
     }
 
     private void ReportsTreeRename_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
@@ -904,8 +918,11 @@ public partial class MainWindow : Window
             var dpi = VisualTreeHelper.GetDpi(WpfPlot);
             var p = e.GetPosition(WpfPlot);
             var dataX = plot.GetCoordinates(new Pixel((float)(p.X * dpi.DpiScaleX), (float)(p.Y * dpi.DpiScaleY))).X;
-            _cursorX[_draggingCursor] = dataX;
-            _cursorLines[_draggingCursor].X = dataX;
+            
+            // Snap cursor to nearest data point
+            var snappedX = FindNearestDataPoint(dataX);
+            _cursorX[_draggingCursor] = snappedX;
+            _cursorLines[_draggingCursor].X = snappedX;
             if (_cursorBand is not null)
             {
                 _cursorBand.X1 = Math.Min(_cursorX[0], _cursorX[1]);
@@ -929,6 +946,21 @@ public partial class MainWindow : Window
                 var tol = perPixel * 6;
                 WpfPlot.Cursor = _cursorX.Any(cx => Math.Abs(cx - dataX) <= tol) ? Cursors.SizeWE : Cursors.Arrow;
             }
+
+            // Update hover legend if enabled
+            if (_vm.SelectedPage?.HoverLegendEnabled == true)
+            {
+                var dpi = VisualTreeHelper.GetDpi(WpfPlot);
+                var p = e.GetPosition(WpfPlot);
+                var dataX = plot.GetCoordinates(new Pixel((float)(p.X * dpi.DpiScaleX), (float)(p.Y * dpi.DpiScaleY))).X;
+                _hoverLegendX = dataX;
+                UpdateHoverLegend();
+                HoverLegendPanel.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                HoverLegendPanel.Visibility = Visibility.Collapsed;
+            }
             return;
         }
 
@@ -936,6 +968,28 @@ public partial class MainWindow : Window
         var shift = -dx * _panDataPerPixel;
         plot.Axes.SetLimitsX(_panStartLimits.Left + shift, _panStartLimits.Right + shift);
         WpfPlot.Refresh();
+    }
+
+    /// <summary>Finds the closest X value in all rendered data series to the given X coordinate.</summary>
+    private double FindNearestDataPoint(double targetX)
+    {
+        double nearest = targetX;
+        double minDistance = double.MaxValue;
+
+        foreach (var (_, xArray, _, _, _) in _rendered)
+        {
+            for (int i = 0; i < xArray.Length; i++)
+            {
+                var distance = Math.Abs(xArray[i] - targetX);
+                if (distance < minDistance)
+                {
+                    minDistance = distance;
+                    nearest = xArray[i];
+                }
+            }
+        }
+
+        return nearest;
     }
 
     private void Plot_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -1188,6 +1242,52 @@ public partial class MainWindow : Window
         }
         BuildCursorReadout(rows);
         CursorHeader.Text = BuildCursorHeader();
+    }
+
+    private void UpdateHoverLegend()
+    {
+        HoverLegendReadout.Children.Clear();
+        if (double.IsNaN(_hoverLegendX) || _rendered.Count == 0) return;
+
+        foreach (var (name, xs, ys, colorHex, _) in _rendered)
+        {
+            var (index, ok) = NearestIndex(xs, _hoverLegendX);
+            var value = ok ? ys[index] : double.NaN;
+            
+            var muted = (Brush)FindResource("MutedBrush");
+            var grid = new Grid { Margin = new Thickness(0, 1, 0, 1) };
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(14) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(150) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(100) });
+
+            var swatch = new Border
+            {
+                Width = 10, Height = 10, CornerRadius = new CornerRadius(2),
+                VerticalAlignment = System.Windows.VerticalAlignment.Center,
+                Background = HexBrush(colorHex),
+            };
+            Grid.SetColumn(swatch, 0);
+            grid.Children.Add(swatch);
+
+            var nameBlock = new TextBlock
+            {
+                Text = name, TextTrimming = TextTrimming.CharacterEllipsis, ToolTip = name,
+                Margin = new Thickness(4, 0, 0, 0),
+            };
+            Grid.SetColumn(nameBlock, 1);
+            grid.Children.Add(nameBlock);
+
+            var valueBlock = new TextBlock
+            {
+                Text = double.IsFinite(value) ? Fmt(value) : "\u2014",
+                HorizontalAlignment = System.Windows.HorizontalAlignment.Right,
+                Margin = new Thickness(4, 0, 0, 0),
+            };
+            Grid.SetColumn(valueBlock, 2);
+            grid.Children.Add(valueBlock);
+
+            HoverLegendReadout.Children.Add(grid);
+        }
     }
 
     // Builds the readout (header + rows) in code so only the enabled calculation columns appear.

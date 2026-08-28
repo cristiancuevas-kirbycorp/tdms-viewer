@@ -178,6 +178,9 @@ public sealed partial class PageViewModel : ObservableObject
     [ObservableProperty]
     private bool _isExpanded;
 
+    [ObservableProperty]
+    private bool _hoverLegendEnabled;
+
     public PageModel Model { get; }
     public ObservableCollection<SeriesViewModel> Series { get; } = new();
     public ObservableCollection<AxisViewModel> Axes { get; } = new();
@@ -189,6 +192,7 @@ public sealed partial class PageViewModel : ObservableObject
     {
         Model = model;
         _name = model.Name;
+        _hoverLegendEnabled = model.HoverLegendEnabled;
 
         foreach (var a in model.Axes)
             AttachAxis(new AxisViewModel(a));
@@ -274,6 +278,7 @@ public sealed partial class PageViewModel : ObservableObject
         SeriesChanged?.Invoke(this, EventArgs.Empty);
 
     partial void OnNameChanged(string value) => Model.Name = value;
+    partial void OnHoverLegendEnabledChanged(bool value) => Model.HoverLegendEnabled = value;
 }
 
 public sealed partial class ReportViewModel : ObservableObject

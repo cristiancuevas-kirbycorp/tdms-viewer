@@ -167,6 +167,8 @@
                                 <Grid.ContextMenu>
                                     <ContextMenu>
                                         <MenuItem Header="Rename" Click="ReportsTreeRename_Click" />
+                                        <Separator />
+                                        <MenuItem Header="Delete" Click="DeleteReport_Click" />
                                     </ContextMenu>
                                 </Grid.ContextMenu>
                                 <TextBlock Text="{Binding Name}"
@@ -183,6 +185,8 @@
                                 <Grid.ContextMenu>
                                     <ContextMenu>
                                         <MenuItem Header="Rename" Click="ReportsTreeRename_Click" />
+                                        <Separator />
+                                        <MenuItem Header="Delete" Click="DeletePage_Click" />
                                     </ContextMenu>
                                 </Grid.ContextMenu>
                                 <TextBlock Text="{Binding Name}"
@@ -224,6 +228,10 @@
                                       ToolTip="Show two draggable time cursors with a value readout" />
                         <Button Style="{StaticResource IconButton}" Content="&#xE713;" Click="CursorConfig_Click"
                                 ToolTip="Configure cursor calculations" />
+                        <ToggleButton x:Name="HoverLegendToggle" Style="{StaticResource IconToggleButton}" FontFamily="Segoe UI"
+                                      IsChecked="{Binding SelectedPage.HoverLegendEnabled, UpdateSourceTrigger=PropertyChanged}"
+                                      Content="Legend"
+                                      ToolTip="Show values at cursor position (hover legend)" />
                         <Rectangle Style="{StaticResource ToolSeparator}" />
                         <TextBlock VerticalAlignment="Center" Foreground="{StaticResource MutedBrush}" FontSize="11"
                                    Text="Scroll / Left-drag = time (X) · Box Zoom for a region · buttons rescale Y" />
@@ -504,6 +512,21 @@
                                        TextWrapping="Wrap" FontSize="10" Foreground="{StaticResource MutedBrush}" Margin="0,4,0,0" />
                         </StackPanel>
                     </Border>
+
+                    <Border x:Name="HoverLegendPanel" Visibility="Collapsed" Background="#F2FFFFFF"
+                            BorderBrush="{StaticResource BorderLightBrush}" BorderThickness="1" CornerRadius="6"
+                            HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10,80" Padding="8,6" MaxHeight="260"
+                            Cursor="SizeAll" PreviewMouseLeftButtonDown="Overlay_MouseDown"
+                            MouseMove="Overlay_MouseMove" MouseLeftButtonUp="Overlay_MouseUp">
+                        <StackPanel>
+                            <TextBlock x:Name="HoverLegendHeader" Text="Values at Cursor" FontWeight="SemiBold" Margin="0,0,0,4" />
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="220">
+                                <StackPanel x:Name="HoverLegendReadout" />
+                            </ScrollViewer>
+                            <TextBlock Text="Shows channel values at the current cursor position. Drag to reposition."
+                                       TextWrapping="Wrap" FontSize="10" Foreground="{StaticResource MutedBrush}" Margin="0,4,0,0" />
+                        </StackPanel>
+                    </Border>
                 </Grid>
             </DockPanel>
 
@@ -513,14 +536,15 @@
             <DockPanel Grid.Column="4">
                 <StackPanel DockPanel.Dock="Top" Margin="6">
                     <TextBlock Text="DATA PORTAL" Style="{StaticResource SectionHeader}" Margin="0,0,0,4" />
+                    <TextBlock Text="Filter" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,0,0,2" />
                     <TextBox Text="{Binding ChannelFilter, UpdateSourceTrigger=PropertyChanged}"
                              ToolTip="Search groups and channels. Multiple words all must match (e.g. 'AFE voltage')." />
                     <TextBlock Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,4,0,0"
                                Text="Tick a channel to add it (or double-click / drag)." />
                     <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
-                        <Button Style="{StaticResource IconButton}" Content="&#xE71E;" Margin="0,0,4,0"
+                        <Button Style="{StaticResource IconButton}" Content="&#xE71D;" Margin="0,0,4,0"
                                 Command="{Binding ExpandAllCommand}" ToolTip="Expand all groups" />
-                        <Button Style="{StaticResource IconButton}" Content="&#xE71D;"
+                        <Button Style="{StaticResource IconButton}" Content="&#xE71E;"
                                 Command="{Binding CollapseAllCommand}" ToolTip="Collapse all groups" />
                     </StackPanel>
                 </StackPanel>

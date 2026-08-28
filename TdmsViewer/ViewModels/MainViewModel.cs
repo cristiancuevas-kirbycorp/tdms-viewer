@@ -403,6 +403,7 @@ public sealed partial class MainViewModel : ObservableObject
             _allChannels = channels;
             LoadSidecar(path);
             _project.TdmsPath = path;
+            EnsurePageExists();  // Auto-create a page if none exist
             BuildChannelTree(channels);
             AddRecent(path);
             IsFileLoaded = true;
@@ -449,6 +450,34 @@ public sealed partial class MainViewModel : ObservableObject
         catch (Exception ex)
         {
             App.Log(ex);
+        }
+    }
+
+    /// <summary>Ensures at least one page exists in the selected report. Auto-creates a default page if needed.</summary>
+    private void EnsurePageExists()
+    {
+        if (SelectedReport is null) return;
+
+        // If selected report has no pages, create one
+        if (SelectedReport.Pages.Count == 0)
+        {
+            var page = new PageViewModel(new PageModel { Name = $"Graph {SelectedReport.Pages.Count + 1}" });
+            SelectedReport.Model.Pages.Add(page.Model);
+            SelectedReport.Pages.Add(page);
+            SelectedPage = page;
+            page.IsSelected = true;
+            ShowReportSettings = false;
+        }
+
+        // Ensure a page is selected
+        if (SelectedPage is null)
+        {
+            SelectedPage = SelectedReport.Pages.FirstOrDefault();
+            if (SelectedPage is not null)
+            {
+                SelectedPage.IsSelected = true;
+                ShowReportSettings = false;
+            }
         }
     }
 
@@ -787,6 +816,50 @@ public sealed partial class MainViewModel : ObservableObject
         SelectedPage = page;
         page.IsSelected = true;
         ShowReportSettings = false;
+        ScheduleAutoSave();
+    }
+
+    private bool CanDeleteReport() => IsFileLoaded && Reports.Count > 1;
+
+    [RelayCommand(CanExecute = nameof(CanDeleteReport))]
+    private void DeleteReport(ReportViewModel? report)
+    {
+        if (report is null || Reports.Count <= 1) return;
+        
+        var wasSelected = report == SelectedReport;
+        _project.Reports.Remove(report.Model);
+        Reports.Remove(report);
+        
+        if (wasSelected)
+        {
+            SelectedReport = Reports.FirstOrDefault();
+            SelectedPage = SelectedReport?.Pages.FirstOrDefault();
+            if (SelectedReport is not null) SelectedReport.IsSelected = true;
+            if (SelectedPage is not null) SelectedPage.IsSelected = true;
+            ShowReportSettings = SelectedPage is null;
+        }
+        ScheduleAutoSave();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanEditReports))]
+    private void DeletePage(PageViewModel? page)
+    {
+        if (page is null || SelectedReport is null) return;
+        
+        // Don't allow deleting if it's the last page in the report
+        if (SelectedReport.Pages.Count <= 1)
+            return;
+        
+        var wasSelected = page == SelectedPage;
+        SelectedReport.Model.Pages.Remove(page.Model);
+        SelectedReport.Pages.Remove(page);
+        
+        if (wasSelected)
+        {
+            SelectedPage = SelectedReport.Pages.FirstOrDefault();
+            if (SelectedPage is not null) SelectedPage.IsSelected = true;
+            ShowReportSettings = false;
+        }
         ScheduleAutoSave();
     }
 

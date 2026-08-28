@@ -65,6 +65,9 @@ public sealed class PageModel
     public double? LegendY { get; set; }
     public double? CursorX { get; set; }
     public double? CursorY { get; set; }
+
+    /// <summary>Whether to show the hover legend that displays values at the mouse position.</summary>
+    public bool HoverLegendEnabled { get; set; }
 }
 
 /// <summary>A corner of the plot area used to place the legend / cursor overlays.</summary>
