@@ -46,6 +46,7 @@ public partial class MainWindow : Window
     private double _hoverLegendX = double.NaN;  // Current hover position on the plot
     private readonly List<ScottPlot.Plottables.Scatter> _hoverPointMarkers = new();  // Highlight dots on hovered data points
     private ScottPlot.Plottables.VerticalLine? _hoverCursorLine = null;  // Dotted vertical line at hover position
+    private readonly List<ScottPlot.Plottables.Scatter> _cursorPointMarkers = new();  // Dots at cursor A/B snap points
 
     // Axis tick-label sizes (print is higher-resolution so it needs a larger value).
     private const float AxisTickFontSize = 15f;
@@ -492,6 +493,10 @@ public partial class MainWindow : Window
         _renderedScales = axisExtents.Select(a => a.Scale).ToList();
         foreach (var (axis, _, _, _, _) in axisExtents) axis.TickLabelStyle.FontSize = AxisTickFontSize;
         plot.Axes.Bottom.TickLabelStyle.FontSize = AxisTickFontSize;
+        
+        // Ensure the built-in ScottPlot legend is always hidden (we use the WPF GraphLegend instead)
+        plot.HideLegend();
+        
         UpdatePlotOverlays();
         WpfPlot.Refresh();
     }
@@ -1230,6 +1235,13 @@ public partial class MainWindow : Window
             plot.Remove(_cursorBand);
             _cursorBand = null;
         }
+        
+        // Remove cursor point markers
+        foreach (var marker in _cursorPointMarkers)
+        {
+            try { plot.Remove(marker); } catch { }
+        }
+        _cursorPointMarkers.Clear();
     }
 
     private void DrawCursors()
@@ -1276,7 +1288,7 @@ public partial class MainWindow : Window
                             scatter.MarkerSize = 8;
                             scatter.LineWidth = 0;
                             scatter.Axes.YAxis = targetAxis;
-                            _hoverPointMarkers.Add(scatter);
+                            _cursorPointMarkers.Add(scatter);  // Use cursor marker list, not hover marker list
                         }
                     }
                     catch { }
@@ -1404,7 +1416,7 @@ public partial class MainWindow : Window
             var muted = (Brush)FindResource("MutedBrush");
             var grid = new Grid { Margin = new Thickness(0, 1, 0, 1) };
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(14) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });  // Auto-size for full name
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(200) });  // Fixed width for alignment
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(65) });  // Reduced from 80
 
             var swatch = new Border
@@ -1418,9 +1430,9 @@ public partial class MainWindow : Window
 
             var nameBlock = new TextBlock
             {
-                Text = name, TextTrimming = TextTrimming.None, ToolTip = name,
+                Text = name, TextTrimming = TextTrimming.CharacterEllipsis, ToolTip = name,
                 Margin = new Thickness(4, 0, 4, 0),
-                MaxWidth = 300  // Prevent tooltip from getting too wide
+                MaxWidth = 190  // Align with cursor legend width
             };
             Grid.SetColumn(nameBlock, 1);
             grid.Children.Add(nameBlock);
@@ -1505,7 +1517,7 @@ public partial class MainWindow : Window
         var muted = (Brush)FindResource("MutedBrush");
         var grid = new Grid { Margin = new Thickness(0, isHeader ? 0 : 1, 0, isHeader ? 3 : 1) };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(14) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });  // Auto-size for full names
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(200) });  // Fixed width for alignment
         foreach (var _ in cols)
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(55) });  // Reduced from 70
 
