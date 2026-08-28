@@ -44,8 +44,10 @@ public partial class MainWindow : Window
     private bool _restoringCursors;
     private CursorCalcSettings _calcs = CursorCalcSettings.Load();
     private double _hoverLegendX = double.NaN;  // Current hover position on the plot
+    private double _hoverLegendY = double.NaN;  // Current hover Y position for crosshairs
     private readonly List<ScottPlot.Plottables.Scatter> _hoverPointMarkers = new();  // Highlight dots on hovered data points
     private ScottPlot.Plottables.VerticalLine? _hoverCursorLine = null;  // Dotted vertical line at hover position
+    private ScottPlot.Plottables.HorizontalLine? _hoverCrosshairLine = null;  // Horizontal crosshair line
     private readonly List<ScottPlot.Plottables.Scatter> _cursorPointMarkers = new();  // Dots at cursor A/B snap points
 
     // Axis tick-label sizes (print is higher-resolution so it needs a larger value).
@@ -965,14 +967,27 @@ public partial class MainWindow : Window
                 _hoverLegendX = dataX;
                 UpdateHoverLegend();
                 
-                // Position panel near cursor with edge detection
-                // Flip to left side if too close to right edge
-                double panelX = p.X + 10;
-                if (panelX + 350 > WpfPlot.ActualWidth)  // ~350px for typical panel width
-                    panelX = p.X - 360;  // Position to the left
-                panelX = Math.Max(5, panelX);  // Don't go off the left edge
+                // Better positioning logic to keep tooltip visible
+                const double margin = 10;
+                const double panelWidth = 300;  // Estimated panel width
+                const double panelHeight = 250;  // Estimated panel height
                 
-                HoverLegendPanel.Margin = new Thickness(panelX, p.Y + 10, 0, 0);
+                double panelX = p.X + margin;
+                double panelY = p.Y - panelHeight - margin;  // Try above cursor first
+                
+                // Flip horizontally if too close to right edge
+                if (panelX + panelWidth > WpfPlot.ActualWidth - 5)
+                    panelX = p.X - panelWidth - margin;
+                
+                // Flip vertically if too close to top edge
+                if (panelY < 5)
+                    panelY = p.Y + margin;
+                
+                // Clamp to screen boundaries
+                panelX = Math.Max(5, Math.Min(panelX, WpfPlot.ActualWidth - panelWidth - 5));
+                panelY = Math.Max(5, Math.Min(panelY, WpfPlot.ActualHeight - panelHeight - 5));
+                
+                HoverLegendPanel.Margin = new Thickness(panelX, panelY, 0, 0);
                 HoverLegendPanel.Visibility = Visibility.Visible;
                 
                 // Hide the normal legend when hover legend is active
@@ -1357,6 +1372,25 @@ public partial class MainWindow : Window
         }
         catch { /* Skip line if there's an issue */ }
 
+        // Add horizontal crosshair line at the nearest Y value from first series
+        if (_rendered.Count > 0)
+        {
+            try
+            {
+                var (name, xs, ys, colorHex, _) = _rendered[0];
+                var (index, ok) = NearestIndex(xs, _hoverLegendX);
+                if (ok && double.IsFinite(ys[index]))
+                {
+                    _hoverCrosshairLine = plot.Add.HorizontalLine(ys[index]);
+                    _hoverCrosshairLine.Color = new ScottPlot.Color(150, 150, 150, 128);
+                    _hoverCrosshairLine.LineStyle.Pattern = LinePattern.Dotted;
+                    _hoverCrosshairLine.LineWidth = 1;
+                    _hoverLegendY = ys[index];
+                }
+            }
+            catch { /* Skip crosshair if there's an issue */ }
+        }
+
         // Add timestamp if DateTime axis
         if (_rendered.Any(r => r.Dt))
         {
@@ -1414,14 +1448,14 @@ public partial class MainWindow : Window
             
             // Build the legend entry
             var muted = (Brush)FindResource("MutedBrush");
-            var grid = new Grid { Margin = new Thickness(0, 1, 0, 1) };
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(14) });
+            var grid = new Grid { Margin = new Thickness(0, 0, 0, 2) };  // More compact
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(200) });  // Fixed width for alignment
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(65) });  // Reduced from 80
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(60) });  // Smaller value column
 
             var swatch = new Border
             {
-                Width = 10, Height = 10, CornerRadius = new CornerRadius(2),
+                Width = 8, Height = 8, CornerRadius = new CornerRadius(2),
                 VerticalAlignment = System.Windows.VerticalAlignment.Center,
                 Background = HexBrush(colorHex),
             };
@@ -1479,6 +1513,13 @@ public partial class MainWindow : Window
         {
             try { plot.Remove(_hoverCursorLine); } catch { }
             _hoverCursorLine = null;
+        }
+        
+        // Remove crosshair line
+        if (_hoverCrosshairLine is not null)
+        {
+            try { plot.Remove(_hoverCrosshairLine); } catch { }
+            _hoverCrosshairLine = null;
         }
     }
 

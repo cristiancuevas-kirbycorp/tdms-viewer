@@ -517,15 +517,12 @@
 
                     <Border x:Name="HoverLegendPanel" Visibility="Collapsed" Background="#F2FFFFFF"
                             BorderBrush="{StaticResource BorderLightBrush}" BorderThickness="1" CornerRadius="6"
-                            HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10,80" Padding="8,6" MaxHeight="260"
+                            HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10,80" Padding="6,4" MaxHeight="260"
                             Cursor="SizeAll" PreviewMouseLeftButtonDown="Overlay_MouseDown"
                             MouseMove="Overlay_MouseMove" MouseLeftButtonUp="Overlay_MouseUp">
-                        <StackPanel>
-                            <TextBlock x:Name="HoverLegendHeader" Text="Values at Cursor" FontWeight="SemiBold" Margin="0,0,0,4" />
-                            <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="220">
-                                <StackPanel x:Name="HoverLegendReadout" />
-                            </ScrollViewer>
-                        </StackPanel>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="240">
+                            <StackPanel x:Name="HoverLegendReadout" />
+                        </ScrollViewer>
                     </Border>
                 </Grid>
             </DockPanel>
