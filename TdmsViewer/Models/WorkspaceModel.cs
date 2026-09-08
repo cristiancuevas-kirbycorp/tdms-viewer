@@ -12,4 +12,12 @@ public sealed class WorkspaceStore
 {
     public List<WorkspaceModel> Workspaces { get; set; } = new();
     public int ActiveIndex { get; set; }
+
+    // Window placement (restored/normal bounds; maximized state preserved separately so
+    // we can remember "opened maximized on monitor X" without losing the pre-maximize size).
+    public double WindowLeft { get; set; } = double.NaN;
+    public double WindowTop { get; set; } = double.NaN;
+    public double WindowWidth { get; set; } = double.NaN;
+    public double WindowHeight { get; set; } = double.NaN;
+    public bool WindowMaximized { get; set; }
 }

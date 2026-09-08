@@ -242,6 +242,25 @@ public sealed partial class PageViewModel : ObservableObject
         SeriesChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>Removes axes that no visible or hidden series references; always keeps at least one axis.</summary>
+    public bool PruneUnusedAxes()
+    {
+        if (Axes.Count <= 1) return false;
+        var used = new HashSet<string>(Series.Select(s => s.AxisId));
+        var stale = Axes.Where(a => !used.Contains(a.Id)).ToList();
+        if (stale.Count == 0) return false;
+
+        foreach (var a in stale)
+        {
+            if (Axes.Count <= 1) break;
+            a.Changed -= OnAnyChanged;
+            Model.Axes.Remove(a.Model);
+            Axes.Remove(a);
+        }
+        SeriesChanged?.Invoke(this, EventArgs.Empty);
+        return true;
+    }
+
     private void EnsureAxis(SeriesViewModel series)
     {
         if (Axes.Any(a => a.Id == series.AxisId)) return;

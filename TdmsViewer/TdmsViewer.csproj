@@ -7,15 +7,17 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
-    <Version>1.11.18</Version>
-    <FileVersion>1.11.18.0</FileVersion>
-    <AssemblyVersion>1.11.18.0</AssemblyVersion>
+    <Version>1.11.19</Version>
+    <FileVersion>1.11.19.0</FileVersion>
+    <AssemblyVersion>1.11.19.0</AssemblyVersion>
     <Product>TDMS Viewer</Product>
     <ApplicationIcon>app.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
     <Resource Include="app.ico" />
+    <None Include="../images/expand-arrow-icon.svg" CopyToOutputDirectory="PreserveNewest" Link="images/expand-arrow-icon.svg" />
+    <None Include="../images/collapse-all-arrow-icon.svg" CopyToOutputDirectory="PreserveNewest" Link="images/collapse-all-arrow-icon.svg" />
   </ItemGroup>
 
   <!-- Fully-qualify WinForms/Drawing types to avoid clashes with WPF equivalents. -->
@@ -32,6 +34,7 @@
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="Jace" Version="1.0.0" />
+    <PackageReference Include="Parquet.Net" Version="5.0.2" />
     <PackageReference Include="PdfSharp" Version="6.1.1" />
     <PackageReference Include="ScottPlot.WPF" Version="5.1.59" />
     <PackageReference Include="TDMSReader" Version="3.1.0" />

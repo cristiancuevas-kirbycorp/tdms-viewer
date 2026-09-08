@@ -12,7 +12,9 @@
         FontFamily="Segoe UI" FontSize="13"
         Background="{StaticResource WindowBrush}"
         Foreground="{StaticResource TextBrush}"
-        d:DataContext="{d:DesignInstance Type=vm:MainViewModel}">
+        d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
+        WindowStartupLocation="Manual"
+        Loaded="MainWindow_Loaded">
 
     <Window.CommandBindings>
         <CommandBinding Command="ApplicationCommands.Print" Executed="PrintPdf_Executed" />
@@ -46,6 +48,9 @@
                 </MenuItem>
                 <Separator />
                 <MenuItem Header="_Print to PDF..." Command="ApplicationCommands.Print" />
+                <MenuItem Header="E_xport">
+                    <MenuItem Header="_Parquet Bundle for Agent..." Command="{Binding ExportParquetBundleCommand}" />
+                </MenuItem>
                 <Separator />
                 <MenuItem Header="E_xit" Click="Exit_Click" />
             </MenuItem>
@@ -165,10 +170,10 @@
                         <HierarchicalDataTemplate DataType="{x:Type vm:ReportViewModel}" ItemsSource="{Binding Pages}">
                             <Grid>
                                 <Grid.ContextMenu>
-                                    <ContextMenu>
-                                        <MenuItem Header="Rename" Click="ReportsTreeRename_Click" />
+                                    <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                        <MenuItem Header="Rename" Click="ReportsTreeRename_Click" DataContext="{Binding}" />
                                         <Separator />
-                                        <MenuItem Header="Delete" Click="DeleteReport_Click" />
+                                        <MenuItem Header="Delete" Click="DeleteReport_Click" DataContext="{Binding}" />
                                     </ContextMenu>
                                 </Grid.ContextMenu>
                                 <TextBlock Text="{Binding Name}"
@@ -183,10 +188,10 @@
                         <DataTemplate DataType="{x:Type vm:PageViewModel}">
                             <Grid>
                                 <Grid.ContextMenu>
-                                    <ContextMenu>
-                                        <MenuItem Header="Rename" Click="ReportsTreeRename_Click" />
+                                    <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                        <MenuItem Header="Rename" Click="ReportsTreeRename_Click" DataContext="{Binding}" />
                                         <Separator />
-                                        <MenuItem Header="Delete" Click="DeletePage_Click" />
+                                        <MenuItem Header="Delete" Click="DeletePage_Click" DataContext="{Binding}" />
                                     </ContextMenu>
                                 </Grid.ContextMenu>
                                 <TextBlock Text="{Binding Name}"
@@ -215,10 +220,6 @@
                         <TextBlock Text="Time" VerticalAlignment="Center" Foreground="{StaticResource MutedBrush}" Margin="2,0,4,0" />
                         <Button Style="{StaticResource IconButton}" Content="&#xE8A3;" Click="ZoomInX_Click" ToolTip="Zoom in on time (X)" />
                         <Button Style="{StaticResource IconButton}" Content="&#xE71F;" Click="ZoomOutX_Click" ToolTip="Zoom out on time (X)" />
-                        <Rectangle Style="{StaticResource ToolSeparator}" />
-                        <TextBlock Text="Value" VerticalAlignment="Center" Foreground="{StaticResource MutedBrush}" Margin="2,0,4,0" />
-                        <Button Style="{StaticResource IconButton}" Content="&#xE8A3;" Click="ZoomInY_Click" ToolTip="Zoom in on value (Y)" />
-                        <Button Style="{StaticResource IconButton}" Content="&#xE71F;" Click="ZoomOutY_Click" ToolTip="Zoom out on value (Y)" />
                         <Rectangle Style="{StaticResource ToolSeparator}" />
                         <ToggleButton x:Name="BoxZoomToggle" Style="{StaticResource IconToggleButton}" Content="&#xE8B3;"
                                       Checked="BoxZoom_Checked" Unchecked="BoxZoom_Unchecked"
@@ -320,6 +321,29 @@
                     </DockPanel>
                 </Grid>
 
+                <!-- Graph legend (fixed header bar above graph) -->
+                <Border DockPanel.Dock="Top" x:Name="GraphLegend" Visibility="Collapsed" Background="#F2FFFFFF"
+                        Padding="8,6" Height="Auto">
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" MaxHeight="60">
+                        <ItemsControl x:Name="LegendItems">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" IsItemsHost="True" HorizontalAlignment="Right" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,12,0" VerticalAlignment="Center" HorizontalAlignment="Right">
+                                        <Border Width="14" Height="6" CornerRadius="2" VerticalAlignment="Center" Margin="0,0,5,0"
+                                                Background="{Binding ColorHex, Converter={StaticResource StringToBrush}}" />
+                                        <TextBlock Text="{Binding Name}" FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Border>
+
                 <Grid x:Name="PlotHost" AllowDrop="True" DragOver="Plot_DragOver" Drop="Plot_Drop" ClipToBounds="True">
                     <sp:WpfPlot x:Name="WpfPlot" ClipToBounds="True" PreviewMouseWheel="Plot_PreviewMouseWheel"
                                 MouseLeftButtonDown="Plot_MouseLeftButtonDown"
@@ -383,7 +407,7 @@
                                            Foreground="{StaticResource MutedBrush}" Margin="0,0,0,14" />
 
                                 <TextBlock Text="Report name" FontWeight="SemiBold" Margin="0,0,0,4" />
-                                <TextBox Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,16" />
+                                <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,16" />
 
                                 <TextBlock Text="Header" FontWeight="SemiBold" Margin="0,0,0,6" />
                                 <Grid Margin="0,0,0,16">
@@ -469,27 +493,6 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Graph legend (draggable, snaps to corners) -->
-                    <Border x:Name="GraphLegend" Visibility="Collapsed" Background="#F2FFFFFF"
-                            BorderBrush="{StaticResource BorderLightBrush}" BorderThickness="1" CornerRadius="6"
-                            HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="10" Padding="8,6" MaxHeight="320"
-                            Cursor="SizeAll" PreviewMouseLeftButtonDown="Overlay_MouseDown"
-                            MouseMove="Overlay_MouseMove" MouseLeftButtonUp="Overlay_MouseUp">
-                        <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="300">
-                            <ItemsControl x:Name="LegendItems">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <StackPanel Orientation="Horizontal" Margin="0,1">
-                                            <Border Width="18" Height="4" CornerRadius="2" VerticalAlignment="Center" Margin="0,0,6,0"
-                                                    Background="{Binding ColorHex, Converter={StaticResource StringToBrush}}" />
-                                            <TextBlock Text="{Binding Name}" FontSize="13" VerticalAlignment="Center" />
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </ScrollViewer>
-                    </Border>
-
                     <Border x:Name="CursorPanel" Visibility="Collapsed" Background="#F2FFFFFF"
                             BorderBrush="{StaticResource BorderLightBrush}" BorderThickness="1" CornerRadius="6"
                             HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10" Padding="8,6" MaxHeight="260"
@@ -534,10 +537,24 @@
                     <TextBlock Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,4,0,0"
                                Text="Tick a channel to add it (or double-click / drag)." />
                     <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
-                        <Button Style="{StaticResource IconButton}" Content="&#xE71D;" Margin="0,0,4,0"
-                                Command="{Binding ExpandAllCommand}" ToolTip="Expand all groups" />
-                        <Button Style="{StaticResource IconButton}" Content="&#xE71E;"
-                                Command="{Binding CollapseAllCommand}" ToolTip="Collapse all groups" />
+                        <Button Style="{StaticResource IconButton}" Margin="0,0,4,0"
+                                Command="{Binding ExpandAllCommand}" ToolTip="Expand all groups">
+                            <Viewbox Width="16" Height="16">
+                                <Path Fill="{StaticResource TextBrush}" Stretch="Uniform"
+                                      Data="M22.72,0h77.45c6.25,0,11.93,2.56,16.05,6.67c4.11,4.11,6.67,9.79,6.67,16.05v74.29c0,6.25-2.56,11.93-6.67,16.05 l-0.32,0.29c-4.09,3.94-9.64,6.38-15.73,6.38H22.72c-6.25,0-11.93-2.56-16.05-6.67l-0.3-0.32C2.43,108.64,0,103.09,0,97.01V22.71 c0-6.25,2.55-11.93,6.67-16.05C10.78,2.55,16.46,0,22.72,0L22.72,0z M75.82,45.83l0.09-0.09c1.08-1.02,2.47-1.54,3.86-1.53 c1.43,0,2.85,0.55,3.93,1.64c0.03,0.01,0.08,0.07,0.1,0.1c1.02,1.08,1.54,2.47,1.54,3.86c0,1.41-0.54,2.82-1.6,3.9 c-5.54,6.04-12.51,14.74-18.28,20.06c-1.2,1.16-2.61,1.75-4.05,1.76c-1.47,0-2.92-0.6-4.15-1.83 c-4.19-3.38-13.84-15.27-18.12-19.99c-1.08-1.1-1.61-2.53-1.6-3.96c0.01-1.44,0.57-2.86,1.66-3.93c0.87-0.85,1.95-1.37,3.07-1.54 c1.15-0.17,2.34,0.01,3.4,0.56c0.14,0.07,0.26,0.16,0.35,0.27l15.48,16.85c2.62-2.7,4.57-5.06,6.52-7.41 C70.29,51.8,72.54,49.08,75.82,45.83L75.82,45.83z M100.16,10.24H22.72c-3.43,0-6.55,1.41-8.81,3.67 c-2.26,2.26-3.67,5.38-3.67,8.81v74.29c0,3.33,1.31,6.35,3.43,8.59l0.24,0.22c2.26,2.26,5.38,3.67,8.81,3.67h77.45 c3.32,0,6.35-1.31,8.59-3.44l0.21-0.23c2.26-2.26,3.67-5.38,3.67-8.81V22.71c0-3.42-1.41-6.54-3.67-8.81 C106.71,11.65,103.59,10.24,100.16,10.24L100.16,10.24z" />
+                            </Viewbox>
+                        </Button>
+                        <Button Style="{StaticResource IconButton}"
+                                Command="{Binding CollapseAllCommand}" ToolTip="Collapse all groups">
+                            <Viewbox Width="16" Height="16">
+                                <Path Fill="{StaticResource TextBrush}" Stretch="Uniform"
+                                      Data="M22.72,0h77.45c6.25,0,11.93,2.56,16.05,6.67c4.11,4.11,6.67,9.79,6.67,16.05v74.29c0,6.25-2.56,11.93-6.67,16.05 l-0.32,0.29c-4.09,3.94-9.64,6.38-15.73,6.38H22.72c-6.25,0-11.93-2.56-16.05-6.67l-0.3-0.32C2.43,108.64,0,103.09,0,97.01V22.71 c0-6.25,2.55-11.93,6.67-16.05C10.78,2.55,16.46,0,22.72,0L22.72,0z M75.82,45.83l0.09-0.09c1.08-1.02,2.47-1.54,3.86-1.53 c1.43,0,2.85,0.55,3.93,1.64c0.03,0.01,0.08,0.07,0.1,0.1c1.02,1.08,1.54,2.47,1.54,3.86c0,1.41-0.54,2.82-1.6,3.9 c-5.54,6.04-12.51,14.74-18.28,20.06c-1.2,1.16-2.61,1.75-4.05,1.76c-1.47,0-2.92-0.6-4.15-1.83 c-4.19-3.38-13.84-15.27-18.12-19.99c-1.08-1.1-1.61-2.53-1.6-3.96c0.01-1.44,0.57-2.86,1.66-3.93c0.87-0.85,1.95-1.37,3.07-1.54 c1.15-0.17,2.34,0.01,3.4,0.56c0.14,0.07,0.26,0.16,0.35,0.27l15.48,16.85c2.62-2.7,4.57-5.06,6.52-7.41 C70.29,51.8,72.54,49.08,75.82,45.83L75.82,45.83z M100.16,10.24H22.72c-3.43,0-6.55,1.41-8.81,3.67 c-2.26,2.26-3.67,5.38-3.67,8.81v74.29c0,3.33,1.31,6.35,3.43,8.59l0.24,0.22c2.26,2.26,5.38,3.67,8.81,3.67h77.45 c3.32,0,6.35-1.31,8.59-3.44l0.21-0.23c2.26-2.26,3.67-5.38,3.67-8.81V22.71c0-3.42-1.41-6.54-3.67-8.81 C106.71,11.65,103.59,10.24,100.16,10.24L100.16,10.24z">
+                                    <Path.RenderTransform>
+                                        <RotateTransform Angle="180" CenterX="61.44" CenterY="59.86" />
+                                    </Path.RenderTransform>
+                                </Path>
+                            </Viewbox>
+                        </Button>
                     </StackPanel>
                 </StackPanel>
 

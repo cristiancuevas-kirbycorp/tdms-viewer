@@ -23,6 +23,7 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly ITdmsService _tdms;
     private readonly IFormulaService _formulas;
     private readonly IProjectService _projects;
+    private readonly ITdmsToParquetService _parquet;
 
     private ProjectModel _project = new();
     private int _colorIndex;
@@ -123,11 +124,12 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>Raised when the preview graph should be redrawn.</summary>
     public event EventHandler? PreviewInvalidated;
 
-    public MainViewModel(ITdmsService tdms, IFormulaService formulas, IProjectService projects)
+    public MainViewModel(ITdmsService tdms, IFormulaService formulas, IProjectService projects, ITdmsToParquetService parquet)
     {
         _tdms = tdms;
         _formulas = formulas;
         _projects = projects;
+        _parquet = parquet;
 
         _filterTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
         _filterTimer.Tick += (_, _) =>
@@ -189,6 +191,7 @@ public sealed partial class MainViewModel : ObservableObject
         {
             SelectedPage.Series.Remove(existing);
             SelectedPage.Model.Series.Remove(existing.Model);
+            SelectedPage.PruneUnusedAxes();
         }
         RaisePlotAfterAdd(wasEmpty && leaf.IsSelected);
     }
@@ -222,6 +225,43 @@ public sealed partial class MainViewModel : ObservableObject
         var dialog = new OpenFileDialog { Filter = "TDMS files (*.tdms)|*.tdms|All files (*.*)|*.*" };
         if (dialog.ShowDialog() != true) return;
         AddOrActivateWorkspace(dialog.FileName);
+    }
+
+    [RelayCommand]
+    private async Task ExportParquetBundleAsync()
+    {
+        var tdmsPath = ActiveWorkspace?.Path;
+        if (string.IsNullOrEmpty(tdmsPath) || !File.Exists(tdmsPath))
+        {
+            StatusText = "Open a TDMS file first, then export.";
+            return;
+        }
+
+        using var dialog = new System.Windows.Forms.FolderBrowserDialog
+        {
+            Description = "Choose a folder to write the Parquet bundle into",
+            UseDescriptionForTitle = true,
+            SelectedPath = Path.GetDirectoryName(tdmsPath) ?? string.Empty,
+        };
+        if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
+
+        var outRoot = dialog.SelectedPath;
+        var progress = new Progress<string>(m => StatusText = m);
+        BusyTitle = "Exporting Parquet bundle...";
+        IsBusy = true;
+        try
+        {
+            var bundle = await Task.Run(() => _parquet.ExportAsync(tdmsPath, outRoot, progress));
+            StatusText = $"Parquet bundle written: {bundle}";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Parquet export failed: {ex.Message}";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
     [RelayCommand]
@@ -556,17 +596,35 @@ public sealed partial class MainViewModel : ObservableObject
 
     // --- Workspace persistence ---
 
-    private static string WorkspaceStorePath => Path.Combine(
+    internal static string WorkspaceStorePath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "TdmsViewer", "workspaces.json");
 
     public void SaveWorkspaces()
     {
         try
         {
+            // Load existing store to preserve window settings
+            WorkspaceStore? existingStore = null;
+            try
+            {
+                if (System.IO.File.Exists(WorkspaceStorePath))
+                {
+                    var json = System.IO.File.ReadAllText(WorkspaceStorePath);
+                    existingStore = System.Text.Json.JsonSerializer.Deserialize<WorkspaceStore>(json);
+                }
+            }
+            catch { }
+
             var store = new WorkspaceStore
             {
                 Workspaces = Workspaces.Select(w => w.Model).ToList(),
                 ActiveIndex = ActiveWorkspace is null ? -1 : Workspaces.IndexOf(ActiveWorkspace),
+                // Preserve window placement from existing store (MainWindow owns updates to these)
+                WindowLeft = existingStore?.WindowLeft ?? double.NaN,
+                WindowTop = existingStore?.WindowTop ?? double.NaN,
+                WindowWidth = existingStore?.WindowWidth ?? double.NaN,
+                WindowHeight = existingStore?.WindowHeight ?? double.NaN,
+                WindowMaximized = existingStore?.WindowMaximized ?? false,
             };
             Directory.CreateDirectory(Path.GetDirectoryName(WorkspaceStorePath)!);
             File.WriteAllText(WorkspaceStorePath, System.Text.Json.JsonSerializer.Serialize(store));
@@ -869,6 +927,7 @@ public sealed partial class MainViewModel : ObservableObject
         if (SelectedPage is null || series is null) return;
         SelectedPage.Series.Remove(series);
         SelectedPage.Model.Series.Remove(series.Model);
+        SelectedPage.PruneUnusedAxes();
         PlotInvalidated?.Invoke(this, false);
     }
 

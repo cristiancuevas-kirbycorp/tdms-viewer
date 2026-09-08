@@ -4,6 +4,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Diagnostics;
+using System.IO;
 using Microsoft.Win32;
 using ScottPlot;
 using TdmsViewer.Models;
@@ -43,6 +44,25 @@ public partial class MainWindow : Window
     private Point _dragOffset;
     private bool _restoringCursors;
     private CursorCalcSettings _calcs = CursorCalcSettings.Load();
+    private readonly System.Windows.Input.Cursor? _openHandCursor;
+    private readonly System.Windows.Input.Cursor? _closedHandCursor;
+    
+    // Try to load Windows system cursors for grab/grabbing, or use alternatives
+    private static System.Windows.Input.Cursor? TryLoadCursor(string cursorName)
+    {
+        try
+        {
+            // Try to load from Windows cursors folder
+            var cursorPath = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+                "Cursors", $"{cursorName}.cur");
+            
+            if (System.IO.File.Exists(cursorPath))
+                return new System.Windows.Input.Cursor(cursorPath);
+        }
+        catch { }
+        return null;
+    }
     private double _hoverLegendX = double.NaN;  // Current hover position on the plot
     private double _hoverLegendY = double.NaN;  // Current hover Y position for crosshairs
     private readonly List<ScottPlot.Plottables.Scatter> _hoverPointMarkers = new();  // Highlight dots on hovered data points
@@ -64,10 +84,14 @@ public partial class MainWindow : Window
         AppVersion = v is null ? "1.0.0" : $"{v.Major}.{v.Minor}.{v.Build}";
         Title = $"TDMS Viewer {AppVersion}";
 
+        // Try to load Windows system cursors for grab/grabbing (won't find them, but use Hand/SizeWE as fallbacks)
+        _openHandCursor = TryLoadCursor("grab");
+        _closedHandCursor = TryLoadCursor("grabbing");
+
         // We drive pan/zoom ourselves to keep the Y axes fixed while moving in time.
         WpfPlot.UserInputProcessor.IsEnabled = false;
 
-        _vm = new MainViewModel(new TdmsService(), new FormulaService(), new ProjectService());
+        _vm = new MainViewModel(new TdmsService(), new FormulaService(), new ProjectService(), new TdmsToParquetService());
         _vm.PlotInvalidated += (_, fitX) => { RenderPlot(fitX); _vm.ScheduleAutoSave(); };
         _vm.PreviewInvalidated += (_, _) => RenderPreview();
         _vm.ColorPickRequested += OnColorPickRequested;
@@ -132,10 +156,98 @@ public partial class MainWindow : Window
         _vm.SaveWorkspaces();
     }
 
+    private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+    {
+        // Placement is applied in OnSourceInitialized (before first paint) to avoid flash.
+    }
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        RestoreWindowPlacement();
+    }
+
+    protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+    {
+        SaveWindowPlacement();
+        base.OnClosing(e);
+    }
+
     protected override void OnClosed(EventArgs e)
     {
         _vm.PersistConfig();
         base.OnClosed(e);
+    }
+
+    /// <summary>Restores window bounds and maximized state from the last session, if valid.</summary>
+    private void RestoreWindowPlacement()
+    {
+        try
+        {
+            var store = LoadWorkspaceStore();
+            if (store is null) return;
+            if (!double.IsFinite(store.WindowLeft) || !double.IsFinite(store.WindowTop)
+                || !double.IsFinite(store.WindowWidth) || !double.IsFinite(store.WindowHeight))
+                return;
+            if (store.WindowWidth < 200 || store.WindowHeight < 150) return;
+
+            // Clamp to the virtual screen so the title bar can't land off all monitors.
+            var vsLeft = SystemParameters.VirtualScreenLeft;
+            var vsTop = SystemParameters.VirtualScreenTop;
+            var vsRight = vsLeft + SystemParameters.VirtualScreenWidth;
+            var vsBottom = vsTop + SystemParameters.VirtualScreenHeight;
+
+            double left = store.WindowLeft;
+            double top = store.WindowTop;
+            double width = Math.Min(store.WindowWidth, SystemParameters.VirtualScreenWidth);
+            double height = Math.Min(store.WindowHeight, SystemParameters.VirtualScreenHeight);
+
+            // Require at least a small strip of the title bar to be visible on some monitor.
+            const double MinVisible = 80;
+            if (left + width < vsLeft + MinVisible) left = vsLeft;
+            if (left > vsRight - MinVisible) left = vsRight - width;
+            if (top < vsTop) top = vsTop;
+            if (top > vsBottom - MinVisible) top = vsBottom - MinVisible;
+
+            Left = left;
+            Top = top;
+            Width = width;
+            Height = height;
+
+            // Setting Left/Top first lets Maximize target the correct monitor.
+            if (store.WindowMaximized)
+                WindowState = WindowState.Maximized;
+        }
+        catch { /* fall back to XAML defaults */ }
+    }
+
+    /// <summary>Persists current window bounds (restored bounds if maximized) and maximized flag.</summary>
+    private void SaveWindowPlacement()
+    {
+        try
+        {
+            // RestoreBounds gives the pre-maximize/minimize bounds; use those so next launch
+            // remembers the user's chosen size when re-maximizing.
+            Rect bounds = WindowState == WindowState.Normal
+                ? new Rect(Left, Top, Width, Height)
+                : RestoreBounds;
+
+            if (bounds.IsEmpty || double.IsNaN(bounds.Width) || double.IsNaN(bounds.Height))
+                bounds = new Rect(Left, Top, Width, Height);
+
+            var store = LoadWorkspaceStore() ?? new WorkspaceStore
+            {
+                Workspaces = _vm.Workspaces.Select(w => w.Model).ToList(),
+                ActiveIndex = _vm.ActiveWorkspace is null ? -1 : _vm.Workspaces.IndexOf(_vm.ActiveWorkspace),
+            };
+            store.WindowLeft = bounds.Left;
+            store.WindowTop = bounds.Top;
+            store.WindowWidth = bounds.Width;
+            store.WindowHeight = bounds.Height;
+            store.WindowMaximized = WindowState == WindowState.Maximized;
+            SaveWorkspaceStore(store);
+        }
+        catch { /* non-fatal */ }
     }
 
     private void ReportsTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
@@ -146,11 +258,13 @@ public partial class MainWindow : Window
         switch (e.NewValue)
         {
             case ReportViewModel report:
+                report.IsSelected = true;
                 _vm.SelectedReport = report;
                 _vm.SelectedPage = report.Pages.FirstOrDefault();
                 _vm.ShowReportSettings = true;
                 break;
             case PageViewModel page:
+                page.IsSelected = true;
                 _vm.SelectedPage = page;
                 _vm.ShowReportSettings = false;
                 break;
@@ -512,7 +626,6 @@ public partial class MainWindow : Window
         GraphLegend.Visibility = items.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
 
         if (_vm.SelectedPage is not { } page) return;
-        PositionOverlay(GraphLegend, page.Model.LegendX, page.Model.LegendY, defaultRight: true, defaultBottom: true);
         PositionOverlay(CursorPanel, page.Model.CursorX, page.Model.CursorY, defaultRight: false, defaultBottom: false);
         RestoreCursorsForPage(page);
     }
@@ -820,16 +933,28 @@ public partial class MainWindow : Window
             }
             plotImg.Freeze();
 
+            // Fixed legend band goes above the plot (matches the on-screen layout).
+            var legendVisible = GraphLegend.Visibility == Visibility.Visible
+                && GraphLegend.ActualWidth > 0 && GraphLegend.ActualHeight > 0;
+            var legendH = legendVisible ? GraphLegend.ActualHeight : 0;
+
+            var totalHeightDip = ph + legendH;
+            var totalHeightPx = (int)Math.Round(totalHeightDip * dpi.DpiScaleY);
+
             var visual = new DrawingVisual();
             using (var dc = visual.RenderOpen())
             {
-                dc.DrawRectangle(Brushes.White, null, new Rect(0, 0, pw, ph));
-                dc.DrawImage(plotImg, new Rect(0, 0, pw, ph));
-                DrawOverlay(dc, GraphLegend);
-                DrawOverlay(dc, CursorPanel);
+                dc.DrawRectangle(Brushes.White, null, new Rect(0, 0, pw, totalHeightDip));
+                if (legendVisible)
+                {
+                    var brush = new VisualBrush(GraphLegend) { Stretch = Stretch.None, AlignmentX = AlignmentX.Left, AlignmentY = AlignmentY.Top };
+                    dc.DrawRectangle(brush, null, new Rect(0, 0, GraphLegend.ActualWidth, legendH));
+                }
+                dc.DrawImage(plotImg, new Rect(0, legendH, pw, ph));
+                DrawOverlayAt(dc, CursorPanel, yOffset: legendH);
             }
 
-            var final = new RenderTargetBitmap(w, h, dpi.PixelsPerInchX, dpi.PixelsPerInchY, PixelFormats.Pbgra32);
+            var final = new RenderTargetBitmap(w, totalHeightPx, dpi.PixelsPerInchX, dpi.PixelsPerInchY, PixelFormats.Pbgra32);
             final.Render(visual);
             final.Freeze();
             Clipboard.SetImage(final);
@@ -843,7 +968,9 @@ public partial class MainWindow : Window
     }
 
     // Renders a visible overlay panel and draws it at its on-screen position over the plot image.
-    private void DrawOverlay(DrawingContext dc, FrameworkElement overlay)
+    private void DrawOverlay(DrawingContext dc, FrameworkElement overlay) => DrawOverlayAt(dc, overlay, 0);
+
+    private void DrawOverlayAt(DrawingContext dc, FrameworkElement overlay, double yOffset)
     {
         if (overlay.Visibility != Visibility.Visible) return;
         var ow = overlay.ActualWidth;
@@ -853,7 +980,7 @@ public partial class MainWindow : Window
         // A VisualBrush paints the panel in isolation, so its layout position doesn't clip the capture.
         var pos = overlay.TranslatePoint(new Point(0, 0), PlotHost);
         var brush = new VisualBrush(overlay) { Stretch = Stretch.Fill };
-        dc.DrawRectangle(brush, null, new Rect(pos.X, pos.Y, ow, oh));
+        dc.DrawRectangle(brush, null, new Rect(pos.X, pos.Y + yOffset, ow, oh));
     }
 
     // Scroll wheel zooms only the shared time (X) axis, centered on the cursor.
@@ -919,7 +1046,7 @@ public partial class MainWindow : Window
         _panDataPerPixel = (xb - xa) / 100.0;
         _panning = true;
         WpfPlot.CaptureMouse();
-        WpfPlot.Cursor = Cursors.ScrollWE;
+        WpfPlot.Cursor = Cursors.SizeAll;
     }
 
     private void Plot_MouseMove(object sender, MouseEventArgs e)
@@ -941,13 +1068,21 @@ public partial class MainWindow : Window
                 _cursorBand.X2 = Math.Max(_cursorX[0], _cursorX[1]);
             }
             UpdateCursorReadout();
-            WpfPlot.Cursor = Cursors.SizeWE;  // Show grab cursor while dragging
+            WpfPlot.Cursor = Cursors.SizeWE;  // Show resize cursor while dragging cursor line
             WpfPlot.Refresh();
             return;
         }
 
         if (!_panning)
         {
+            // Only show hover legend when viewing a graph page (not report settings)
+            if (!_vm.GraphPageVisible)
+            {
+                HoverLegendPanel.Visibility = Visibility.Collapsed;
+                RemoveHoverPointMarkers();
+                return;
+            }
+
             // Hovering over a cursor line shows the resize (left/right) cursor to hint it's draggable.
             if (_cursorsOn && _cursorLines.Count == 2)
             {
@@ -994,14 +1129,28 @@ public partial class MainWindow : Window
                 panelX = Math.Max(5, Math.Min(panelX, WpfPlot.ActualWidth - panelWidth - 5));
                 panelY = Math.Max(5, Math.Min(panelY, WpfPlot.ActualHeight - panelHeight - 5));
                 
-                HoverLegendPanel.Margin = new Thickness(panelX, panelY, 0, 0);
-                HoverLegendPanel.Visibility = Visibility.Visible;
+                // Only show hover legend if we're over the plot area (small margins to allow edge-to-edge visibility)
+                // Use very small margins to keep tooltip visible close to the edges
+                bool isOverPlotArea = p.X > 2 && p.X < WpfPlot.ActualWidth - 2
+                                   && p.Y > 2 && p.Y < WpfPlot.ActualHeight - 2;
                 
-                // Hide the normal legend when hover legend is active
-                plot.Legend.IsVisible = false;
-                GraphLegend.Visibility = Visibility.Collapsed;
-                
-                WpfPlot.Refresh();
+                if (isOverPlotArea)
+                {
+                    HoverLegendPanel.Margin = new Thickness(panelX, panelY, 0, 0);
+                    HoverLegendPanel.Visibility = Visibility.Visible;
+                    
+                    // Keep the normal legend visible while showing hover legend
+                    plot.Legend.IsVisible = false;
+                    
+                    WpfPlot.Refresh();
+                }
+                else
+                {
+                    // Over axes, hide the hover legend
+                    HoverLegendPanel.Visibility = Visibility.Collapsed;
+                    RemoveHoverPointMarkers();
+                    WpfPlot.Refresh();
+                }
             }
             return;
         }
@@ -1009,7 +1158,7 @@ public partial class MainWindow : Window
         var dx = e.GetPosition(WpfPlot).X - _panStartPixel.X;
         var shift = -dx * _panDataPerPixel;
         plot.Axes.SetLimitsX(_panStartLimits.Left + shift, _panStartLimits.Right + shift);
-        WpfPlot.Cursor = Cursors.ScrollWE;  // Show panning cursor
+        WpfPlot.Cursor = Cursors.SizeAll;  // Show grabbing cursor while panning
         WpfPlot.Refresh();
     }
 
@@ -1166,13 +1315,14 @@ public partial class MainWindow : Window
         _dragOverlay = null;
         el.ReleaseMouseCapture();
 
+        // Only save cursor panel position (legend is now fixed at top-right)
         if (_vm.SelectedPage is { } page && PlotHost.ActualWidth > 0 && PlotHost.ActualHeight > 0)
         {
             var tl = el.TranslatePoint(new Point(0, 0), PlotHost);
             var fx = Math.Clamp(tl.X / PlotHost.ActualWidth, 0, 1);
             var fy = Math.Clamp(tl.Y / PlotHost.ActualHeight, 0, 1);
-            if (ReferenceEquals(el, GraphLegend)) { page.Model.LegendX = fx; page.Model.LegendY = fy; }
-            else { page.Model.CursorX = fx; page.Model.CursorY = fy; }
+            page.Model.CursorX = fx;
+            page.Model.CursorY = fy;
             _vm.ScheduleAutoSave();
         }
         e.Handled = true;
@@ -1199,7 +1349,7 @@ public partial class MainWindow : Window
     private void RepositionOverlays()
     {
         if (_vm.SelectedPage is not { } page) return;
-        PositionOverlay(GraphLegend, page.Model.LegendX, page.Model.LegendY, defaultRight: true, defaultBottom: true);
+        // Legend is now fixed at top-right, only reposition cursor panel
         PositionOverlay(CursorPanel, page.Model.CursorX, page.Model.CursorY, defaultRight: false, defaultBottom: false);
     }
 
@@ -1371,18 +1521,28 @@ public partial class MainWindow : Window
             catch { /* Skip crosshair if there's an issue */ }
         }
 
-        // Add timestamp if DateTime axis
+        // Add timestamp if DateTime axis (use the actual data point's X value, not interpolated)
         if (_rendered.Any(r => r.Dt))
         {
             var muted = (Brush)FindResource("MutedBrush");
             var grid = new Grid { Margin = new Thickness(0, 1, 0, 1) };
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             
+            // Get the actual X value from the first series data point
+            string tsText = "—";
+            if (_rendered.Count > 0)
+            {
+                var (_, xs, _, _, _, _) = _rendered[0];
+                var (index, ok) = NearestIndex(xs, _hoverLegendX);
+                if (ok && double.IsFinite(xs[index]))
+                {
+                    tsText = DateTime.FromOADate(xs[index]).ToString("yyyy-MM-dd HH:mm:ss.fff");
+                }
+            }
+            
             var tsBlock = new TextBlock
             {
-                Text = double.IsFinite(_hoverLegendX) 
-                    ? DateTime.FromOADate(_hoverLegendX).ToString("yyyy-MM-dd HH:mm:ss.fff")
-                    : "—",
+                Text = tsText,
                 Foreground = muted,
                 FontSize = 10,
                 Margin = new Thickness(4, 0, 0, 0)
@@ -1596,6 +1756,34 @@ public partial class MainWindow : Window
         {
             return Brushes.Gray;
         }
+    }
+
+    // Helper methods for window persistence
+    private WorkspaceStore? LoadWorkspaceStore()
+    {
+        try
+        {
+            var storePath = MainViewModel.WorkspaceStorePath;
+            if (System.IO.File.Exists(storePath))
+            {
+                var json = System.IO.File.ReadAllText(storePath);
+                return System.Text.Json.JsonSerializer.Deserialize<WorkspaceStore>(json);
+            }
+        }
+        catch { }
+        return null;
+    }
+
+    private void SaveWorkspaceStore(WorkspaceStore store)
+    {
+        try
+        {
+            var storePath = MainViewModel.WorkspaceStorePath;
+            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(storePath)!);
+            var json = System.Text.Json.JsonSerializer.Serialize(store);
+            System.IO.File.WriteAllText(storePath, json);
+        }
+        catch { }
     }
 
     private void CursorConfig_Click(object sender, RoutedEventArgs e)
@@ -2058,9 +2246,8 @@ public partial class MainWindow : Window
             // Legend at the page's saved corner (bigger than the default).
             if (page.Series.Any(s => s.Visible))
             {
-                plot.ShowLegend();
-                plot.Legend.Alignment = PrintLegendAlignment(page);
-                plot.Legend.FontSize = 20;  // Increased from 16 for better visibility
+                // Fixed legend header is composited above the plot below; hide ScottPlot's floating legend.
+                plot.HideLegend();
             }
 
             // Cursors, if the page has them on.
@@ -2084,16 +2271,98 @@ public partial class MainWindow : Window
             foreach (var (axis, _, _, _, _) in axisExtents) axis.TickLabelStyle.FontSize = PrintTickFontSize;
             plot.Axes.Bottom.TickLabelStyle.FontSize = PrintTickFontSize;
 
+            // Reserve space at top for the fixed legend header (same look as the on-screen band).
+            var legendItems = page.Series.Where(s => s.Visible)
+                .Select(s => (Name: s.DisplayName, ColorHex: s.ColorHex))
+                .ToList();
+            int legendH = legendItems.Count > 0 ? Math.Max(28, height / 22) : 0;
+            int plotH = Math.Max(1, height - legendH);
+
             var tmp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"tvplot_{Guid.NewGuid():N}.png");
-            plot.SavePng(tmp, width, height);
-            var bytes = System.IO.File.ReadAllBytes(tmp);
+            plot.SavePng(tmp, width, plotH);
+            var plotBytes = System.IO.File.ReadAllBytes(tmp);
             System.IO.File.Delete(tmp);
-            return bytes;
+
+            if (legendH == 0) return plotBytes;
+            return ComposeLegendAbovePlot(plotBytes, width, plotH, legendItems, legendH);
         }
         catch (Exception ex)
         {
             App.Log(ex);
             return null;
         }
+    }
+
+    // Draws a horizontal legend band above the plot bytes and returns the combined image as PNG bytes.
+    private static byte[] ComposeLegendAbovePlot(byte[] plotPng, int width, int plotH,
+        List<(string Name, string ColorHex)> items, int legendH)
+    {
+        var plotImg = new BitmapImage();
+        using (var ms = new System.IO.MemoryStream(plotPng))
+        {
+            plotImg.BeginInit();
+            plotImg.CacheOption = BitmapCacheOption.OnLoad;
+            plotImg.StreamSource = ms;
+            plotImg.EndInit();
+        }
+        plotImg.Freeze();
+
+        double totalW = width;
+        double totalH = plotH + legendH;
+        var visual = new DrawingVisual();
+        using (var dc = visual.RenderOpen())
+        {
+            dc.DrawRectangle(Brushes.White, null, new Rect(0, 0, totalW, totalH));
+
+            // Legend: right-aligned pill + name pairs, matching the WPF fixed legend.
+            double fontSize = Math.Max(12, legendH * 0.5);
+            double gap = fontSize * 1.0;   // spacing between items
+            double pillW = fontSize * 1.3;
+            double pillH = fontSize * 0.55;
+            double swatchGap = fontSize * 0.4;
+            double rightPad = fontSize * 0.8;
+            var typeface = new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
+
+            var texts = items.Select(i => new FormattedText(
+                i.Name, System.Globalization.CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
+                typeface, fontSize, Brushes.Black, 1.0)).ToList();
+
+            double totalItemsW = 0;
+            for (int i = 0; i < items.Count; i++)
+                totalItemsW += pillW + swatchGap + texts[i].WidthIncludingTrailingWhitespace + (i < items.Count - 1 ? gap : 0);
+
+            double x = Math.Max(rightPad, totalW - rightPad - totalItemsW);
+            double centerY = legendH / 2.0;
+
+            for (int i = 0; i < items.Count; i++)
+            {
+                Brush pill = Brushes.Gray;
+                try
+                {
+                    var c = (System.Windows.Media.Color)ColorConverter.ConvertFromString(items[i].ColorHex);
+                    pill = new SolidColorBrush(c);
+                    pill.Freeze();
+                }
+                catch { }
+
+                dc.DrawRoundedRectangle(pill, null,
+                    new Rect(x, centerY - pillH / 2.0, pillW, pillH), 2, 2);
+                x += pillW + swatchGap;
+                dc.DrawText(texts[i], new Point(x, centerY - texts[i].Height / 2.0));
+                x += texts[i].WidthIncludingTrailingWhitespace + gap;
+            }
+
+            dc.DrawImage(plotImg, new Rect(0, legendH, totalW, plotH));
+        }
+
+        var rtb = new RenderTargetBitmap(width, (int)totalH, 96, 96, PixelFormats.Pbgra32);
+        rtb.Render(visual);
+        rtb.Freeze();
+
+        using var outMs = new System.IO.MemoryStream();
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(rtb));
+        encoder.Save(outMs);
+        return outMs.ToArray();
     }
 }
