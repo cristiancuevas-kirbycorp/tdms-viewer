@@ -88,6 +88,9 @@ public sealed partial class MainViewModel : ObservableObject
     private string _channelFilter = string.Empty;
 
     [ObservableProperty]
+    private string _filterSummary = string.Empty;
+
+    [ObservableProperty]
     private TdmsChannelInfo? _selectedChannelInfo;
 
     [ObservableProperty]
@@ -625,6 +628,7 @@ public sealed partial class MainViewModel : ObservableObject
                 WindowWidth = existingStore?.WindowWidth ?? double.NaN,
                 WindowHeight = existingStore?.WindowHeight ?? double.NaN,
                 WindowMaximized = existingStore?.WindowMaximized ?? false,
+                UiScale = existingStore?.UiScale ?? 1.0,
             };
             Directory.CreateDirectory(Path.GetDirectoryName(WorkspaceStorePath)!);
             File.WriteAllText(WorkspaceStorePath, System.Text.Json.JsonSerializer.Serialize(store));
@@ -658,44 +662,54 @@ public sealed partial class MainViewModel : ObservableObject
         ChannelTree.Clear();
         AllChannelPaths.Clear();
 
-        var tokens = (ChannelFilter ?? string.Empty)
-            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var query = FilterQuery.Parse(ChannelFilter);
+        var filtering = !query.IsEmpty;
+        var total = 0;
+        var shown = 0;
 
-        // Every token must appear somewhere in "group + channel", so tokens can span group and channel names.
-        bool Matches(string group, string name)
+        void AddLeaf(ChannelTreeItemViewModel parent, TdmsChannelInfo info)
         {
-            if (tokens.Length == 0) return true;
-            var combined = $"{group} {name}";
-            foreach (var t in tokens)
-                if (!combined.Contains(t, StringComparison.OrdinalIgnoreCase))
-                    return false;
-            return true;
-        }
-
-        var calc = new ChannelTreeItemViewModel(CalculationsGroup) { IsExpanded = tokens.Length > 0 };
-        foreach (var f in _project.Formulas.Where(f => Matches(CalculationsGroup, f.Name)))
-        {
-            var leaf = new ChannelTreeItemViewModel(new TdmsChannelInfo { Group = CalculationsGroup, Name = f.Name });
+            var leaf = new ChannelTreeItemViewModel(info);
             leaf.PropertyChanged += OnLeafChanged;
-            calc.Children.Add(leaf);
+            parent.Children.Add(leaf);
+            shown++;
         }
-        if (calc.Children.Count > 0 || tokens.Length == 0)
+
+        var calc = new ChannelTreeItemViewModel(CalculationsGroup) { IsExpanded = filtering };
+        if (query.TryScopeToGroup(CalculationsGroup, out var calcTerms))
+        {
+            foreach (var f in _project.Formulas)
+            {
+                total++;
+                if (FilterQuery.MatchesChannel(calcTerms, f.Name))
+                    AddLeaf(calc, new TdmsChannelInfo { Group = CalculationsGroup, Name = f.Name });
+            }
+        }
+        else
+        {
+            total += _project.Formulas.Count;
+        }
+        if (calc.Children.Count > 0 || !filtering)
             ChannelTree.Add(calc);
 
         foreach (var group in channels.GroupBy(c => c.Group).OrderBy(g => g.Key))
         {
-            var node = new ChannelTreeItemViewModel(group.Key) { IsExpanded = tokens.Length > 0 };
-            foreach (var ch in group.Where(c => Matches(group.Key, c.Name)).OrderBy(c => c.Name))
+            var node = new ChannelTreeItemViewModel(group.Key) { IsExpanded = filtering };
+            var scoped = query.TryScopeToGroup(group.Key, out var terms);
+            foreach (var ch in group.OrderBy(c => c.Name))
             {
-                var leaf = new ChannelTreeItemViewModel(ch);
-                leaf.PropertyChanged += OnLeafChanged;
-                node.Children.Add(leaf);
+                total++;
                 AllChannelPaths.Add($"{ch.Group}/{ch.Name}");
+                if (scoped && FilterQuery.MatchesChannel(terms, ch.Name))
+                    AddLeaf(node, ch);
             }
             if (node.Children.Count > 0)
                 ChannelTree.Add(node);
         }
-        ChannelToInsert = AllChannelPaths.FirstOrDefault();
+
+        FilterSummary = filtering ? $"{shown} of {total} channels" : $"{total} channels";
+        if (ChannelToInsert is null || !AllChannelPaths.Contains(ChannelToInsert))
+            ChannelToInsert = AllChannelPaths.FirstOrDefault();
         SyncChannelChecks();
     }
 

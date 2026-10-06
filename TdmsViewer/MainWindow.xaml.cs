@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using System.Diagnostics;
 using System.IO;
 using Microsoft.Win32;
@@ -165,6 +166,67 @@ public partial class MainWindow : Window
     {
         base.OnSourceInitialized(e);
         RestoreWindowPlacement();
+        ApplyUiScale(LoadWorkspaceStore()?.UiScale ?? 1.0, persist: false);
+    }
+
+    // --- In-app UI zoom (independent of the monitor's Windows scaling) ---
+
+    private static readonly double[] ZoomSteps = { 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0, 2.5 };
+    private double _uiScale = 1.0;
+
+    private void ZoomIn_Executed(object sender, ExecutedRoutedEventArgs e) => StepUiZoom(1);
+
+    private void ZoomOut_Executed(object sender, ExecutedRoutedEventArgs e) => StepUiZoom(-1);
+
+    private void ZoomReset_Executed(object sender, ExecutedRoutedEventArgs e) => ApplyUiScale(1.0);
+
+    protected override void OnPreviewMouseWheel(MouseWheelEventArgs e)
+    {
+        // Ctrl+wheel zooms the UI; the plot keeps plain wheel for the time axis.
+        if (Keyboard.Modifiers == ModifierKeys.Control && e.Delta != 0)
+        {
+            StepUiZoom(e.Delta > 0 ? 1 : -1);
+            e.Handled = true;
+            return;
+        }
+        base.OnPreviewMouseWheel(e);
+    }
+
+    private void StepUiZoom(int direction)
+    {
+        var nearest = 0;
+        for (var i = 1; i < ZoomSteps.Length; i++)
+            if (Math.Abs(ZoomSteps[i] - _uiScale) < Math.Abs(ZoomSteps[nearest] - _uiScale))
+                nearest = i;
+
+        ApplyUiScale(ZoomSteps[Math.Clamp(nearest + direction, 0, ZoomSteps.Length - 1)]);
+    }
+
+    private void ApplyUiScale(double scale, bool persist = true)
+    {
+        _uiScale = Math.Clamp(double.IsFinite(scale) ? scale : 1.0, ZoomSteps[0], ZoomSteps[^1]);
+
+        RootPanel.LayoutTransform = Math.Abs(_uiScale - 1.0) < 0.001
+            ? Transform.Identity
+            : new ScaleTransform(_uiScale, _uiScale);
+        ZoomLevelItem.Header = $"Zoom: {_uiScale * 100:0}%";
+
+        if (persist) SaveUiScale();
+    }
+
+    private void SaveUiScale()
+    {
+        try
+        {
+            var store = LoadWorkspaceStore() ?? new WorkspaceStore
+            {
+                Workspaces = _vm.Workspaces.Select(w => w.Model).ToList(),
+                ActiveIndex = _vm.ActiveWorkspace is null ? -1 : _vm.Workspaces.IndexOf(_vm.ActiveWorkspace),
+            };
+            store.UiScale = _uiScale;
+            SaveWorkspaceStore(store);
+        }
+        catch { /* non-fatal */ }
     }
 
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
@@ -283,69 +345,66 @@ public partial class MainWindow : Window
 
     private void ReportsTree_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key != Key.F2) return;
+        if (e.Key != Key.F2 || Keyboard.FocusedElement is TextBox) return;
         if (BeginReportsTreeRename(ReportsTree.SelectedItem))
             e.Handled = true;
     }
 
     private void ReportsTreeRename_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is FrameworkElement { DataContext: MenuItem { DataContext: { } node } })
+        if (sender is MenuItem { DataContext: { } node })
             BeginReportsTreeRename(node);
     }
 
     private bool BeginReportsTreeRename(object? node)
     {
-        switch (node)
+        if (node is not (ReportViewModel or PageViewModel)) return false;
+
+        // Exactly one inline editor open at a time; this also commits any other one that was open.
+        foreach (var report in _vm.Reports)
         {
-            case ReportViewModel report:
-                report.IsEditing = true;
-                return true;
-            case PageViewModel page:
-                page.IsEditing = true;
-                return true;
-            default:
-                return false;
+            report.IsEditing = ReferenceEquals(report, node);
+            foreach (var page in report.Pages)
+                page.IsEditing = ReferenceEquals(page, node);
         }
+        return true;
     }
 
     private void DeleteReport_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is FrameworkElement { DataContext: MenuItem { DataContext: ReportViewModel report } })
+        if (sender is MenuItem { DataContext: ReportViewModel report })
             _vm.DeleteReportCommand.Execute(report);
     }
 
     private void DeletePage_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is FrameworkElement { DataContext: MenuItem { DataContext: PageViewModel page } })
+        if (sender is MenuItem { DataContext: PageViewModel page })
             _vm.DeletePageCommand.Execute(page);
     }
 
     private void ReportsTreeRename_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
-        if (sender is TextBox { IsVisible: true } tb)
+        if (sender is not TextBox { IsVisible: true } tb) return;
+
+        tb.Tag = tb.Text;
+        // Focus once the context menu has finished closing, otherwise it takes keyboard focus back.
+        Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() =>
         {
-            tb.Tag = tb.Text;
-            tb.Focus();
+            if (!tb.IsVisible) return;
+            Keyboard.Focus(tb);
             tb.SelectAll();
-        }
+        }));
     }
 
     private void ReportsTreeRename_KeyDown(object sender, KeyEventArgs e)
     {
         if (sender is not TextBox tb) return;
-        if (e.Key == Key.Enter)
-        {
-            CommitReportsTreeRename(tb, cancel: false);
-            Keyboard.ClearFocus();
-            e.Handled = true;
-        }
-        else if (e.Key == Key.Escape)
-        {
-            CommitReportsTreeRename(tb, cancel: true);
-            Keyboard.ClearFocus();
-            e.Handled = true;
-        }
+        if (e.Key is not (Key.Enter or Key.Escape)) return;
+
+        CommitReportsTreeRename(tb, cancel: e.Key == Key.Escape);
+        // Hand focus back to the tree so arrow keys and F2 keep working.
+        ReportsTree.Focus();
+        e.Handled = true;
     }
 
     private void ReportsTreeRename_LostFocus(object sender, RoutedEventArgs e)
@@ -1492,6 +1551,18 @@ public partial class MainWindow : Window
         var plot = WpfPlot.Plot;
         var page = _vm.SelectedPage;
 
+        // Size the entries so every series fits on-screen without a scrollbar: the vertical WrapPanel
+        // spills into extra columns, and the name column shrinks to keep those columns inside the plot.
+        const double rowHeight = 18;
+        var availableHeight = Math.Max(rowHeight * 4, WpfPlot.ActualHeight - 40);
+        var availableWidth = Math.Max(240, WpfPlot.ActualWidth - 40);
+        var rowsPerColumn = Math.Max(1, (int)(availableHeight / rowHeight));
+        var columns = Math.Max(1, (int)Math.Ceiling((_rendered.Count + 1) / (double)rowsPerColumn));
+        var nameWidth = Math.Max(70, Math.Min(190, availableWidth / columns - 110));
+
+        HoverLegendReadout.MaxHeight = availableHeight;
+        HoverLegendPanel.MaxWidth = availableWidth;
+
         // Add a light dotted vertical line at the cursor position
         try
         {
@@ -1588,9 +1659,9 @@ public partial class MainWindow : Window
             
             // Build the legend entry
             var muted = (Brush)FindResource("MutedBrush");
-            var grid = new Grid { Margin = new Thickness(0, 0, 0, 2) };  // More compact
+            var grid = new Grid { Margin = new Thickness(0, 0, 10, 2) };  // Right margin separates columns
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(200) });  // Fixed width for alignment
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(nameWidth) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });  // Value + unit auto-width
 
             var swatch = new Border
@@ -1606,7 +1677,7 @@ public partial class MainWindow : Window
             {
                 Text = name, TextTrimming = TextTrimming.CharacterEllipsis, ToolTip = name,
                 Margin = new Thickness(4, 0, 4, 0),
-                MaxWidth = 190  // Align with cursor legend width
+                MaxWidth = nameWidth,
             };
             Grid.SetColumn(nameBlock, 1);
             grid.Children.Add(nameBlock);

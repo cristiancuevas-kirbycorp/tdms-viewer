@@ -20,4 +20,7 @@ public sealed class WorkspaceStore
     public double WindowWidth { get; set; } = double.NaN;
     public double WindowHeight { get; set; } = double.NaN;
     public bool WindowMaximized { get; set; }
+
+    /// <summary>In-app UI zoom, applied on top of the monitor's Windows scaling. 1.0 = no override.</summary>
+    public double UiScale { get; set; } = 1.0;
 }

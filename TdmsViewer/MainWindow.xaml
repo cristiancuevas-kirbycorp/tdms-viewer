@@ -18,7 +18,19 @@
 
     <Window.CommandBindings>
         <CommandBinding Command="ApplicationCommands.Print" Executed="PrintPdf_Executed" />
+        <CommandBinding Command="NavigationCommands.IncreaseZoom" Executed="ZoomIn_Executed" />
+        <CommandBinding Command="NavigationCommands.DecreaseZoom" Executed="ZoomOut_Executed" />
+        <CommandBinding Command="NavigationCommands.Zoom" Executed="ZoomReset_Executed" />
     </Window.CommandBindings>
+
+    <Window.InputBindings>
+        <KeyBinding Modifiers="Control" Key="OemPlus" Command="NavigationCommands.IncreaseZoom" />
+        <KeyBinding Modifiers="Control" Key="Add" Command="NavigationCommands.IncreaseZoom" />
+        <KeyBinding Modifiers="Control" Key="OemMinus" Command="NavigationCommands.DecreaseZoom" />
+        <KeyBinding Modifiers="Control" Key="Subtract" Command="NavigationCommands.DecreaseZoom" />
+        <KeyBinding Modifiers="Control" Key="D0" Command="NavigationCommands.Zoom" />
+        <KeyBinding Modifiers="Control" Key="NumPad0" Command="NavigationCommands.Zoom" />
+    </Window.InputBindings>
 
     <Window.Resources>
         <local:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility" />
@@ -31,7 +43,7 @@
         </CollectionViewSource>
     </Window.Resources>
 
-    <DockPanel>
+    <DockPanel x:Name="RootPanel">
         <Menu DockPanel.Dock="Top">
             <MenuItem Header="_File">
                 <MenuItem Header="_Open TDMS..." Command="{Binding OpenTdmsCommand}" />
@@ -57,6 +69,13 @@
             <MenuItem Header="_Edit">
                 <MenuItem Header="Add _Report" Command="{Binding AddReportCommand}" />
                 <MenuItem Header="Add _Page" Command="{Binding AddPageCommand}" />
+            </MenuItem>
+            <MenuItem Header="_View">
+                <MenuItem x:Name="ZoomLevelItem" Header="Zoom: 100%" IsEnabled="False" />
+                <Separator />
+                <MenuItem Header="Zoom _In" Command="NavigationCommands.IncreaseZoom" InputGestureText="Ctrl++" />
+                <MenuItem Header="Zoom _Out" Command="NavigationCommands.DecreaseZoom" InputGestureText="Ctrl+-" />
+                <MenuItem Header="_Reset Zoom" Command="NavigationCommands.Zoom" InputGestureText="Ctrl+0" />
             </MenuItem>
             <MenuItem Header="_Help">
                 <MenuItem Header="Check for _Updates..." Click="CheckForUpdates_Click" />
@@ -179,6 +198,7 @@
                                 <TextBlock Text="{Binding Name}"
                                            Visibility="{Binding IsEditing, Converter={StaticResource InverseBoolToVisibility}}" />
                                 <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                                         MinWidth="140"
                                          IsVisibleChanged="ReportsTreeRename_IsVisibleChanged"
                                          KeyDown="ReportsTreeRename_KeyDown"
                                          LostFocus="ReportsTreeRename_LostFocus"
@@ -197,6 +217,7 @@
                                 <TextBlock Text="{Binding Name}"
                                            Visibility="{Binding IsEditing, Converter={StaticResource InverseBoolToVisibility}}" />
                                 <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                                         MinWidth="140"
                                          IsVisibleChanged="ReportsTreeRename_IsVisibleChanged"
                                          KeyDown="ReportsTreeRename_KeyDown"
                                          LostFocus="ReportsTreeRename_LostFocus"
@@ -324,16 +345,16 @@
                 <!-- Graph legend (fixed header bar above graph) -->
                 <Border DockPanel.Dock="Top" x:Name="GraphLegend" Visibility="Collapsed" Background="#F2FFFFFF"
                         Padding="8,6" Height="Auto">
-                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" MaxHeight="60">
+                    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto" MaxHeight="76">
                         <ItemsControl x:Name="LegendItems">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
-                                    <StackPanel Orientation="Horizontal" IsItemsHost="True" HorizontalAlignment="Right" />
+                                    <WrapPanel Orientation="Horizontal" IsItemsHost="True" HorizontalAlignment="Right" />
                                 </ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <StackPanel Orientation="Horizontal" Margin="0,0,12,0" VerticalAlignment="Center" HorizontalAlignment="Right">
+                                    <StackPanel Orientation="Horizontal" Margin="0,1,12,1" VerticalAlignment="Center">
                                         <Border Width="14" Height="6" CornerRadius="2" VerticalAlignment="Center" Margin="0,0,5,0"
                                                 Background="{Binding ColorHex, Converter={StaticResource StringToBrush}}" />
                                         <TextBlock Text="{Binding Name}" FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}" />
@@ -515,12 +536,11 @@
 
                     <Border x:Name="HoverLegendPanel" Visibility="Collapsed" Background="#F2FFFFFF"
                             BorderBrush="{StaticResource BorderLightBrush}" BorderThickness="1" CornerRadius="6"
-                            HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10,80" Padding="6,4" MaxHeight="260"
+                            HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10,80" Padding="6,4"
                             Cursor="SizeAll" PreviewMouseLeftButtonDown="Overlay_MouseDown"
                             MouseMove="Overlay_MouseMove" MouseLeftButtonUp="Overlay_MouseUp">
-                        <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="240">
-                            <StackPanel x:Name="HoverLegendReadout" />
-                        </ScrollViewer>
+                        <!-- Vertical WrapPanel: entries flow into extra columns instead of scrolling. -->
+                        <WrapPanel x:Name="HoverLegendReadout" Orientation="Vertical" />
                     </Border>
                 </Grid>
             </DockPanel>
@@ -532,8 +552,19 @@
                 <StackPanel DockPanel.Dock="Top" Margin="6">
                     <TextBlock Text="DATA PORTAL" Style="{StaticResource SectionHeader}" Margin="0,0,0,4" />
                     <TextBlock Text="Filter" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,0,0,2" />
-                    <TextBox Text="{Binding ChannelFilter, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTip="Search groups and channels. Multiple words all must match (e.g. 'AFE voltage')." />
+                    <TextBox Text="{Binding ChannelFilter, UpdateSourceTrigger=PropertyChanged}">
+                        <TextBox.ToolTip>
+                            <TextBlock>
+                                Search groups and channels. Multiple words all must match.<LineBreak />
+                                <Run FontWeight="SemiBold">"SS AFE"</Run> — quote to match a phrase with spaces.<LineBreak />
+                                A term that matches a group name shows every channel in it.<LineBreak />
+                                <Run FontWeight="SemiBold">"SS AFE"/volt</Run> — left of the / filters groups, right filters channels.<LineBreak />
+                                <Run FontWeight="SemiBold">=name</Run> — whole-name match. <Run FontWeight="SemiBold">-name</Run> — exclude.
+                            </TextBlock>
+                        </TextBox.ToolTip>
+                    </TextBox>
+                    <TextBlock Text="{Binding FilterSummary}" Foreground="{StaticResource MutedBrush}"
+                               FontSize="11" Margin="0,2,0,0" />
                     <TextBlock Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,4,0,0"
                                Text="Tick a channel to add it (or double-click / drag)." />
                     <StackPanel Orientation="Horizontal" Margin="0,6,0,0">

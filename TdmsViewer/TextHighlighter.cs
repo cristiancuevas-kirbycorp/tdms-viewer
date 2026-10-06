@@ -26,11 +26,10 @@ public static class TextHighlighter
         if (d is not TextBlock tb) return;
 
         var text = GetText(d) ?? string.Empty;
-        var tokens = (GetQuery(d) ?? string.Empty)
-            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var tokens = FilterQuery.Parse(GetQuery(d)).HighlightTerms;
 
         tb.Inlines.Clear();
-        if (tokens.Length == 0 || text.Length == 0)
+        if (tokens.Count == 0 || text.Length == 0)
         {
             tb.Inlines.Add(new Run(text));
             return;
